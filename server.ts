@@ -160,19 +160,31 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 1,
-        versionName: '1.0.0',
+        versionCode: 3,
+        versionName: '2.1.0',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'প্রাথমিক সংস্করণ: সব মোবাইল অ্যাপ ডিটেকশন, ডুয়াল পাসওয়ার্ড ভল্ট ও দৈনিক ইউজ টাইম লিমিট।',
-        apkUrl: '',
+        changelog: 'v2.1.0: অ্যাপ খুললেই অটো আপডেট চেক, লাইভ ওয়েব কন্ট্রোল, ফিঙ্গারপ্রিন্ট/ফেস, প্যাটার্ন, সুন্দর পিন কিপ্যাড ও প্রতিটা অ্যাপে আলাদা পাসওয়ার্ড!',
+        apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
     };
     fs.writeFileSync(STORE_FILE, JSON.stringify(initial, null, 2), 'utf-8');
     return initial;
   }
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
-  return JSON.parse(raw) as VaultStore;
+  const parsed = JSON.parse(raw) as VaultStore;
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 3) {
+    parsed.releaseManifest = {
+      versionCode: 3,
+      versionName: '2.1.0',
+      policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
+      publishedAt: new Date().toISOString(),
+      changelog: 'v2.1.0: অ্যাপ খুললেই অটো আপডেট চেক, লাইভ ওয়েব কন্ট্রোল, ফিঙ্গারপ্রিন্ট/ফেস, প্যাটার্ন, সুন্দর পিন কিপ্যাড ও প্রতিটা অ্যাপে আলাদা পাসওয়ার্ড!',
+      apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
+    };
+    writeStore(parsed);
+  }
+  return parsed;
 }
 
 function writeStore(store: VaultStore): void {

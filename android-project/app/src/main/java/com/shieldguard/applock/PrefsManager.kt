@@ -7,6 +7,11 @@ import androidx.security.crypto.MasterKey
 import org.json.JSONObject
 import java.security.MessageDigest
 
+data class LockCredential(
+    val type: String, // TYPE_PIN | TYPE_PATTERN | TYPE_PASSWORD
+    val hash: String
+)
+
 class PrefsManager(context: Context) {
     private val prefs: SharedPreferences
 
@@ -24,10 +29,23 @@ class PrefsManager(context: Context) {
     }
 
     companion object {
+        const val TYPE_PIN = "PIN"
+        const val TYPE_PATTERN = "PATTERN"
+        const val TYPE_PASSWORD = "PASSWORD"
+
+        const val RELOCK_IMMEDIATE = "IMMEDIATE"
+        const val RELOCK_SCREEN_OFF = "SCREEN_OFF"
+        const val RELOCK_GRACE_3M = "GRACE_3M"
+
         private const val KEY_VAULT_HASH = "vault_password_hash"
+        private const val KEY_VAULT_TYPE = "vault_lock_type"
         private const val KEY_APPLOCK_HASH = "applock_password_hash"
+        private const val KEY_APPLOCK_TYPE = "applock_lock_type"
         private const val KEY_SEPARATE_PASSWORDS = "use_separate_passwords"
+        private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_RELOCK_MODE = "relock_mode"
         private const val KEY_LOCKED_APPS = "locked_apps_set"
+        private const val KEY_PER_APP_LOCKS_JSON = "per_app_locks_json"
         private const val KEY_LIMITS_JSON = "daily_limits_json"
         private const val KEY_UNLOCKED_UNTIL = "temp_unlocked_until_json"
         private const val KEY_OTA_URL = "ota_server_url"
@@ -38,37 +56,116 @@ class PrefsManager(context: Context) {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    // --- Vault Master Lock ---
     fun isVaultPasswordSet(): Boolean = prefs.getString(KEY_VAULT_HASH, null) != null
 
-    fun setVaultPassword(rawPassword: String) {
-        prefs.edit().putString(KEY_VAULT_HASH, sha256(rawPassword)).apply()
+    fun getVaultLockType(): String = prefs.getString(KEY_VAULT_TYPE, TYPE_PIN) ?: TYPE_PIN
+
+    fun setVaultCredential(rawSecret: String, type: String = TYPE_PIN) {
+        prefs.edit()
+            .putString(KEY_VAULT_HASH, sha256(rawSecret))
+            .putString(KEY_VAULT_TYPE, type)
+            .apply()
     }
 
-    fun verifyVaultPassword(rawPassword: String): Boolean {
+    fun setVaultPassword(rawPassword: String) = setVaultCredential(rawPassword, TYPE_PASSWORD)
+
+    fun verifyVaultPassword(rawSecret: String): Boolean {
         val saved = prefs.getString(KEY_VAULT_HASH, null) ?: return false
-        return saved == sha256(rawPassword)
+        return saved == sha256(rawSecret)
     }
 
+    // --- Global App-Lock (Separate from Vault) ---
     fun isSeparateAppLockEnabled(): Boolean = prefs.getBoolean(KEY_SEPARATE_PASSWORDS, true)
 
     fun setSeparateAppLockEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SEPARATE_PASSWORDS, enabled).apply()
     }
 
-    fun isAppLockPasswordSet(): Boolean = prefs.getString(KEY_APPLOCK_HASH, null) != null
-
-    fun setAppLockPassword(rawPassword: String) {
-        prefs.edit().putString(KEY_APPLOCK_HASH, sha256(rawPassword)).apply()
+    fun getGlobalAppLockType(): String {
+        if (!isSeparateAppLockEnabled()) return getVaultLockType()
+        return prefs.getString(KEY_APPLOCK_TYPE, TYPE_PIN) ?: TYPE_PIN
     }
 
-    fun verifyAppLockPassword(rawPassword: String): Boolean {
-        if (!isSeparateAppLockEnabled()) {
-            return verifyVaultPassword(rawPassword)
+    fun setAppLockCredential(rawSecret: String, type: String = TYPE_PIN) {
+        prefs.edit()
+            .putString(KEY_APPLOCK_HASH, sha256(rawSecret))
+            .putString(KEY_APPLOCK_TYPE, type)
+            .apply()
+    }
+
+    fun setAppLockPassword(rawPassword: String) = setAppLockCredential(rawPassword, TYPE_PASSWORD)
+
+    fun verifyGlobalAppLock(rawSecret: String): Boolean {
+        if (!isSeparateAppLockEnabled()) return verifyVaultPassword(rawSecret)
+        val saved = prefs.getString(KEY_APPLOCK_HASH, null) ?: return verifyVaultPassword(rawSecret)
+        return saved == sha256(rawSecret)
+    }
+
+    // --- Per-App Custom Credential ---
+    private fun getPerAppLocksObject(): JSONObject {
+        val raw = prefs.getString(KEY_PER_APP_LOCKS_JSON, "{}") ?: "{}"
+        return try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            JSONObject()
         }
-        val saved = prefs.getString(KEY_APPLOCK_HASH, null) ?: return verifyVaultPassword(rawPassword)
-        return saved == sha256(rawPassword)
     }
 
+    fun getCustomAppLock(packageName: String): LockCredential? {
+        val root = getPerAppLocksObject()
+        val obj = root.optJSONObject(packageName) ?: return null
+        val type = obj.optString("type", "")
+        val hash = obj.optString("hash", "")
+        if (type.isBlank() || hash.isBlank()) return null
+        return LockCredential(type, hash)
+    }
+
+    fun hasCustomAppLock(packageName: String): Boolean = getCustomAppLock(packageName) != null
+
+    fun setCustomAppLock(packageName: String, rawSecret: String, type: String) {
+        val root = getPerAppLocksObject()
+        val entry = JSONObject().apply {
+            put("type", type)
+            put("hash", sha256(rawSecret))
+        }
+        root.put(packageName, entry)
+        prefs.edit().putString(KEY_PER_APP_LOCKS_JSON, root.toString()).apply()
+        setAppLocked(packageName, true)
+    }
+
+    fun removeCustomAppLock(packageName: String) {
+        val root = getPerAppLocksObject()
+        root.remove(packageName)
+        prefs.edit().putString(KEY_PER_APP_LOCKS_JSON, root.toString()).apply()
+    }
+
+    fun getEffectiveLockType(packageName: String): String {
+        return getCustomAppLock(packageName)?.type ?: getGlobalAppLockType()
+    }
+
+    fun verifyAppUnlock(packageName: String, rawSecret: String): Boolean {
+        val custom = getCustomAppLock(packageName)
+        if (custom != null) {
+            return custom.hash == sha256(rawSecret)
+        }
+        return verifyGlobalAppLock(rawSecret)
+    }
+
+    // --- Biometric & Relock Mode ---
+    fun isBiometricEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, true)
+
+    fun setBiometricEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+    }
+
+    fun getRelockMode(): String = prefs.getString(KEY_RELOCK_MODE, RELOCK_IMMEDIATE) ?: RELOCK_IMMEDIATE
+
+    fun setRelockMode(mode: String) {
+        prefs.edit().putString(KEY_RELOCK_MODE, mode).apply()
+    }
+
+    // --- Locked Apps & Daily Limits ---
     fun getLockedApps(): Set<String> {
         return prefs.getStringSet(KEY_LOCKED_APPS, emptySet())?.toSet() ?: emptySet()
     }
@@ -97,10 +194,23 @@ class PrefsManager(context: Context) {
         prefs.edit().putString(KEY_LIMITS_JSON, obj.toString()).apply()
     }
 
+    // --- Temporary & Session Unlocks ---
     fun grantTemporaryUnlock(packageName: String, durationMillis: Long = 3 * 60 * 1000L) {
         val obj = JSONObject(prefs.getString(KEY_UNLOCKED_UNTIL, "{}") ?: "{}")
         obj.put(packageName, System.currentTimeMillis() + durationMillis)
         prefs.edit().putString(KEY_UNLOCKED_UNTIL, obj.toString()).apply()
+    }
+
+    fun revokeTemporaryUnlock(packageName: String) {
+        val obj = JSONObject(prefs.getString(KEY_UNLOCKED_UNTIL, "{}") ?: "{}")
+        if (obj.has(packageName)) {
+            obj.remove(packageName)
+            prefs.edit().putString(KEY_UNLOCKED_UNTIL, obj.toString()).apply()
+        }
+    }
+
+    fun clearAllSessionUnlocks() {
+        prefs.edit().putString(KEY_UNLOCKED_UNTIL, "{}").apply()
     }
 
     fun isTemporarilyUnlocked(packageName: String): Boolean {

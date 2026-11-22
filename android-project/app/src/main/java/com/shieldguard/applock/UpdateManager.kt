@@ -24,26 +24,85 @@ data class UpdateCheckResult(
 
 object UpdateManager {
 
-    suspend fun checkForUpdate(serverBaseUrl: String): UpdateCheckResult = withContext(Dispatchers.IO) {
-        val endpoint = "$serverBaseUrl/api/updates/latest"
-        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-        }
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
-        val json = JSONObject(body)
-        val latestCode = json.optInt("versionCode", BuildConfig.VERSION_CODE)
-        val latestName = json.optString("versionName", BuildConfig.VERSION_NAME)
-        val changelog = json.optString("changelog", "")
-        val apkUrl = json.optString("apkUrl", "").takeIf { it.isNotBlank() }
+    private const val GITHUB_LATEST_RELEASE_API =
+        "https://api.github.com/repos/umdbasir829-lgtm/New-app/releases/latest"
 
-        UpdateCheckResult(
-            hasUpdate = latestCode > BuildConfig.VERSION_CODE,
-            latestVersionName = latestName,
-            latestVersionCode = latestCode,
-            changelog = changelog,
-            apkDownloadUrl = apkUrl
+    suspend fun checkForUpdate(serverBaseUrl: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+        // 1. Check OTA server manifest
+        var otaResult: UpdateCheckResult? = null
+        try {
+            val endpoint = "$serverBaseUrl/api/updates/latest"
+            val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            if (conn.responseCode in 200..299) {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                val latestCode = json.optInt("versionCode", BuildConfig.VERSION_CODE)
+                val latestName = json.optString("versionName", BuildConfig.VERSION_NAME)
+                val changelog = json.optString("changelog", "")
+                val apkUrl = json.optString("apkUrl", "").takeIf { it.isNotBlank() }
+                otaResult = UpdateCheckResult(
+                    hasUpdate = latestCode > BuildConfig.VERSION_CODE,
+                    latestVersionName = latestName,
+                    latestVersionCode = latestCode,
+                    changelog = changelog,
+                    apkDownloadUrl = apkUrl
+                )
+            }
+        } catch (_: Exception) {}
+
+        if (otaResult != null && otaResult.hasUpdate) {
+            return@withContext otaResult
+        }
+
+        // 2. Fallback: Check GitHub Releases API directly (works automatically when repo is Public)
+        try {
+            val ghConn = (URL(GITHUB_LATEST_RELEASE_API).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "ShieldGuardAppLock")
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            if (ghConn.responseCode in 200..299) {
+                val body = ghConn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                val tag = json.optString("tag_name", "")
+                val notes = json.optString("body", "নতুন GitHub রিলিজ পাওয়া গেছে।")
+                val assets = json.optJSONArray("assets")
+                var apkAssetUrl: String? = null
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        val name = asset.optString("name", "")
+                        if (name.endsWith(".apk")) {
+                            apkAssetUrl = asset.optString("browser_download_url", "")
+                            break
+                        }
+                    }
+                }
+                val parsedBuild = tag.substringAfterLast(".", "0").toIntOrNull() ?: 0
+                if (apkAssetUrl != null && parsedBuild > BuildConfig.VERSION_CODE) {
+                    return@withContext UpdateCheckResult(
+                        hasUpdate = true,
+                        latestVersionName = tag.ifBlank { "New Release" },
+                        latestVersionCode = parsedBuild,
+                        changelog = notes,
+                        apkDownloadUrl = apkAssetUrl
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        otaResult ?: UpdateCheckResult(
+            hasUpdate = false,
+            latestVersionName = BuildConfig.VERSION_NAME,
+            latestVersionCode = BuildConfig.VERSION_CODE,
+            changelog = "",
+            apkDownloadUrl = null
         )
     }
 
@@ -51,9 +110,10 @@ object UpdateManager {
         val endpoint = "$serverBaseUrl/api/state"
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
+            connectTimeout = 6000
+            readTimeout = 6000
         }
+        if (conn.responseCode !in 200..299) return@withContext 0
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         val json = JSONObject(body)
         val apps = json.optJSONArray("apps") ?: return@withContext 0
@@ -81,32 +141,44 @@ object UpdateManager {
             return@withContext
         }
 
-        val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
-        val apkFile = File(updatesDir, "ShieldGuard-update.apk")
+        try {
+            val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val apkFile = File(updatesDir, "ShieldGuard-update.apk")
 
-        val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = true
-            connectTimeout = 15000
-            readTimeout = 30000
-        }
-        conn.inputStream.use { input ->
-            FileOutputStream(apkFile).use { output ->
-                input.copyTo(output)
+            val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 15000
+                readTimeout = 30000
             }
-        }
-
-        val apkUri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            apkFile
-        )
-
-        withContext(Dispatchers.Main) {
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (conn.responseCode !in 200..299) {
+                throw IllegalStateException("HTTP ${conn.responseCode}")
             }
-            context.startActivity(installIntent)
+            conn.inputStream.use { input ->
+                FileOutputStream(apkFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            val apkUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+
+            withContext(Dispatchers.Main) {
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(installIntent)
+            }
+        } catch (_: Exception) {
+            withContext(Dispatchers.Main) {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(browserIntent)
+            }
         }
     }
 }

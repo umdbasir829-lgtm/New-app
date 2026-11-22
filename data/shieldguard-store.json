@@ -97,11 +97,11 @@
     }
   ],
   "releaseManifest": {
-    "versionCode": 1,
-    "versionName": "1.0.0",
-    "policyRevision": 1,
-    "publishedAt": "2026-11-22T15:53:06.199Z",
-    "changelog": "প্রাথমিক সংস্করণ: সব মোবাইল অ্যাপ ডিটেকশন, ডুয়াল পাসওয়ার্ড ভল্ট ও দৈনিক ইউজ টাইম লিমিট।",
-    "apkUrl": ""
+    "versionCode": 2,
+    "versionName": "2.0.0",
+    "policyRevision": 2,
+    "publishedAt": "2026-11-22T16:52:23.274Z",
+    "changelog": "v2.0.0: আধুনিক লক স্ক্রিন ও হোম ডিজাইন, ফিঙ্গারপ্রিন্ট ও ফেস আনলক, ৩x৩ প্যাটার্ন, সুন্দর পিন কিপ্যাড, প্রতিটা অ্যাপে আলাদা পাসওয়ার্ড এবং অ্যাপ থেকে বের হলেই সাথে সাথে রি-লক!",
+    "apkUrl": "https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk"
   }
 }

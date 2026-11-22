@@ -11,8 +11,8 @@ android {
         applicationId = "com.shieldguard.applock"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "2.1.0"
 
         buildConfigField("String", "OTA_SERVER_URL", "\"https://ais-pre-5pcn7zy4w5ncujr7kjxthh-910762661731.asia-northeast1.run.app\"")
     }
@@ -48,5 +48,6 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
