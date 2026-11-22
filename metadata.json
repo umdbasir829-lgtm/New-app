@@ -1,0 +1,6 @@
+{
+  "name": "ShieldGuard AppLock",
+  "description": "Mobile app locker, daily usage time limiter, dual-password vault, and OTA APK update manager.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

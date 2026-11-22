@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ShieldGuard AppLock</string>
+    <string name="accessibility_service_label">ShieldGuard App Lock &amp; Limit Monitor</string>
+    <string name="accessibility_service_desc">Detects when a locked or time-limited app opens so ShieldGuard can show the lock screen.</string>
+</resources>
