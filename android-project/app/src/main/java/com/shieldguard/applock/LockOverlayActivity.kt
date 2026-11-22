@@ -33,6 +33,11 @@ class LockOverlayActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PrefsManager(this)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                goHome()
+            }
+        })
         handleIntent(intent)
     }
 
@@ -61,12 +66,6 @@ class LockOverlayActivity : AppCompatActivity() {
         } catch (_: Exception) {
             null
         }
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                goHome()
-            }
-        })
 
         val effectiveType = if (lockMode == MODE_LIMIT_REACHED) {
             prefs.getVaultLockType()

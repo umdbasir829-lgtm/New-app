@@ -51,10 +51,14 @@ class PatternLockView(context: Context) : View(context) {
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val size = minOf(
-            MeasureSpec.getSize(widthMeasureSpec),
-            UiStyleHelper.dp(context, 280)
-        )
+        val mode = MeasureSpec.getMode(widthMeasureSpec)
+        val rawW = MeasureSpec.getSize(widthMeasureSpec)
+        val defaultSize = UiStyleHelper.dp(context, 260)
+        val size = if (mode == MeasureSpec.UNSPECIFIED || rawW == 0) {
+            defaultSize
+        } else {
+            minOf(rawW, UiStyleHelper.dp(context, 280))
+        }
         setMeasuredDimension(size, size)
     }
 

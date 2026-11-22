@@ -701,7 +701,7 @@ class MainActivity : AppCompatActivity() {
             else -> "৩ মিনিট পর লক"
         }
         val statusMeta = TextView(this).apply {
-            text = "${allInstalledApps.size}টি অ্যাপ · $lockedCountটি লক · $limitedCountটি লিমিট · $relockLabel"
+            text = "${allInstalledApps.size}টি অ্যাপ · ${lockedCount}টি লক · ${limitedCount}টি লিমিট · $relockLabel"
             textSize = 12f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, 0)
