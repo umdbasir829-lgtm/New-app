@@ -179,11 +179,11 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 6,
-        versionName: '2.3.1',
+        versionCode: 7,
+        versionName: '2.4.0',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'v2.3.1: স্থায়ী সাইনিং কী ক্যাশ ফিক্স, ব্যাজ টেক্সট র‍্যাপিং ফিক্স, কীপ্যাড ক্লিপিং ফিক্স ও নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন!',
+        changelog: 'v2.4.0: সঠিক ৪/৬ ডিজিট পিন ডট, ডাবল-পিন ও ১-সেকেন্ড ফ্ল্যাশ ফিক্স, আনলকের পর কিবোর্ড হাইড, অ্যাপে ফিঙ্গারপ্রিন্ট সেভ/যাচাই ও কাস্টম মিনিট সীমা!',
         apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
       runtimeConfig: DEFAULT_RUNTIME_CONFIG,
@@ -194,13 +194,13 @@ function readStore(): VaultStore {
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
   const parsed = JSON.parse(raw) as VaultStore;
   let dirty = false;
-  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 6) {
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 7) {
     parsed.releaseManifest = {
-      versionCode: 6,
-      versionName: '2.3.1',
+      versionCode: 7,
+      versionName: '2.4.0',
       policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
       publishedAt: new Date().toISOString(),
-      changelog: 'v2.3.1: স্থায়ী সাইনিং কী ক্যাশ ফিক্স, ব্যাজ টেক্সট র‍্যাপিং ফিক্স, কীপ্যাড ক্লিপিং ফিক্স ও নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন!',
+      changelog: 'v2.4.0: সঠিক ৪/৬ ডিজিট পিন ডট, ডাবল-পিন ও ১-সেকেন্ড ফ্ল্যাশ ফিক্স, আনলকের পর কিবোর্ড হাইড, অ্যাপে ফিঙ্গারপ্রিন্ট সেভ/যাচাই ও কাস্টম মিনিট সীমা!',
       apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
     };
     dirty = true;

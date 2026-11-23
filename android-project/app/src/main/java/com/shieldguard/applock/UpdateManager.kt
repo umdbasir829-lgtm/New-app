@@ -122,8 +122,11 @@ object UpdateManager {
             if (conn.responseCode in 200..299) {
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(body)
+                val manifest = json.optJSONObject("releaseManifest")
+                val serverPolicyRev = manifest?.optInt("policyRevision", 0) ?: 0
+                val lastRev = prefs.getLastSyncedPolicyRevision()
                 val apps = json.optJSONArray("apps")
-                if (apps != null) {
+                if (apps != null && serverPolicyRev > lastRev) {
                     for (i in 0 until apps.length()) {
                         val item = apps.getJSONObject(i)
                         val pkg = item.optString("packageName")
@@ -132,6 +135,7 @@ object UpdateManager {
                         prefs.setDailyLimit(pkg, item.optInt("dailyLimitMinutes", 0))
                         syncedCount++
                     }
+                    prefs.setLastSyncedPolicyRevision(serverPolicyRev)
                 }
                 val rc = json.optJSONObject("runtimeConfig")
                 if (rc != null && prefs.saveRuntimeConfig(rc)) {

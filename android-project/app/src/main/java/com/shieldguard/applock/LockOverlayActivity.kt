@@ -1,10 +1,13 @@
 package com.shieldguard.applock
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -30,10 +33,13 @@ class LockOverlayActivity : AppCompatActivity() {
         private var foregroundActive: Boolean = false
 
         @Volatile
+        private var biometricPromptActive: Boolean = false
+
+        @Volatile
         private var currentTargetPkg: String? = null
 
         fun isForegroundFor(pkg: String): Boolean {
-            return foregroundActive && currentTargetPkg == pkg
+            return (foregroundActive || biometricPromptActive) && currentTargetPkg == pkg
         }
     }
 
@@ -42,13 +48,17 @@ class LockOverlayActivity : AppCompatActivity() {
     private var lockMode: String = MODE_APP_LOCK
     private var pinBuffer = StringBuilder()
     private val pinDots = mutableListOf<View>()
+    private var expectedPinLength: Int = 0
+    private var pinDotsRow: LinearLayout? = null
     private lateinit var errorTv: TextView
+    private var passwordInputView: EditText? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PrefsManager(this)
         window.statusBarColor = UiStyleHelper.BG_CANVAS_TOP
         window.navigationBarColor = UiStyleHelper.BG_CANVAS
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -62,14 +72,29 @@ class LockOverlayActivity : AppCompatActivity() {
         super.onResume()
         foregroundActive = true
         currentTargetPkg = targetPkg
+        AppLockAccessibilityService.dismissInstantShieldCover()
     }
 
     override fun onPause() {
         foregroundActive = false
+        hideSoftKeyboard()
         super.onPause()
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (!biometricPromptActive && !isFinishing) {
+            foregroundActive = false
+            if (currentTargetPkg == targetPkg) {
+                currentTargetPkg = null
+            }
+            AppLockAccessibilityService.clearOverlayState()
+            finishAndRemoveTask()
+        }
+    }
+
     override fun onDestroy() {
+        biometricPromptActive = false
         if (currentTargetPkg == targetPkg) {
             foregroundActive = false
             currentTargetPkg = null
@@ -83,6 +108,18 @@ class LockOverlayActivity : AppCompatActivity() {
         handleIntent(intent)
     }
 
+    private fun hideSoftKeyboard() {
+        try {
+            passwordInputView?.clearFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            val token = currentFocus?.windowToken ?: window.decorView.windowToken
+            if (token != null) {
+                imm?.hideSoftInputFromWindow(token, 0)
+            }
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        } catch (_: Exception) {}
+    }
+
     private fun handleIntent(currentIntent: Intent) {
         UiStyleHelper.applyRuntimeTheme(prefs)
         targetPkg = currentIntent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
@@ -91,6 +128,7 @@ class LockOverlayActivity : AppCompatActivity() {
         val usedMins = currentIntent.getIntExtra(EXTRA_USED_MINUTES, 0)
         val limitMins = currentIntent.getIntExtra(EXTRA_LIMIT_MINUTES, 0)
         pinBuffer.clear()
+        passwordInputView = null
 
         val appLabel = try {
             val appInfo = packageManager.getApplicationInfo(targetPkg, 0)
@@ -111,16 +149,23 @@ class LockOverlayActivity : AppCompatActivity() {
             prefs.getEffectiveLockType(targetPkg)
         }
 
-        val biometricAllowed = lockMode != MODE_LIMIT_REACHED &&
-            prefs.isBiometricAllowedForApp(targetPkg) &&
-            canUseBiometric()
+        expectedPinLength = if (effectiveType == PrefsManager.TYPE_PIN) {
+            if (lockMode == MODE_LIMIT_REACHED) prefs.getVaultPinLength() else prefs.getEffectivePinLength(targetPkg)
+        } else {
+            0
+        }
+
+        val biometricAllowed = if (lockMode == MODE_LIMIT_REACHED) {
+            prefs.isBiometricAllowedForVault() && canUseBiometric()
+        } else {
+            prefs.isBiometricAllowedForApp(targetPkg) && canUseBiometric()
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = UiStyleHelper.canvasGradient()
         }
 
-        // Scrollable top + keypad region (guarantees ZERO button clipping on any screen height)
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
@@ -142,7 +187,6 @@ class LockOverlayActivity : AppCompatActivity() {
             )
         }
 
-        // Compact Premium Identity Card
         val headerCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -269,7 +313,6 @@ class LockOverlayActivity : AppCompatActivity() {
         scroll.addView(contentCol)
         root.addView(scroll)
 
-        // Pinned Clean Bottom Bar (NEVER overlaps keypad; small tap-to-unlock fingerprint button!)
         val bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -321,6 +364,9 @@ class LockOverlayActivity : AppCompatActivity() {
         root.addView(bottomBar)
 
         setContentView(root)
+        if (effectiveType != PrefsManager.TYPE_PASSWORD) {
+            hideSoftKeyboard()
+        }
     }
 
     private fun lockTypeBengali(type: String): String {
@@ -331,33 +377,41 @@ class LockOverlayActivity : AppCompatActivity() {
         }
     }
 
+    private fun createPinDotView(): View {
+        return View(this).apply {
+            background = UiStyleHelper.circleBox(
+                this@LockOverlayActivity,
+                UiStyleHelper.BG_CARD,
+                UiStyleHelper.BORDER_GLOW,
+                2
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                UiStyleHelper.dp(this@LockOverlayActivity, 14),
+                UiStyleHelper.dp(this@LockOverlayActivity, 14)
+            ).apply {
+                setMargins(
+                    UiStyleHelper.dp(this@LockOverlayActivity, 8),
+                    0,
+                    UiStyleHelper.dp(this@LockOverlayActivity, 8),
+                    0
+                )
+            }
+        }
+    }
+
     private fun buildPinUnlockUi(container: LinearLayout) {
         pinDots.clear()
+        val initialDots = if (expectedPinLength in 4..8) expectedPinLength else 4
+        val maxLen = if (expectedPinLength in 4..8) expectedPinLength else 6
+
         val dotsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 4), 0, UiStyleHelper.dp(this@LockOverlayActivity, 16))
         }
-        for (i in 0 until 6) {
-            val dot = View(this).apply {
-                background = UiStyleHelper.circleBox(
-                    this@LockOverlayActivity,
-                    UiStyleHelper.BG_CARD,
-                    UiStyleHelper.BORDER_GLOW,
-                    2
-                )
-                layoutParams = LinearLayout.LayoutParams(
-                    UiStyleHelper.dp(this@LockOverlayActivity, 13),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 13)
-                ).apply {
-                    setMargins(
-                        UiStyleHelper.dp(this@LockOverlayActivity, 7),
-                        0,
-                        UiStyleHelper.dp(this@LockOverlayActivity, 7),
-                        0
-                    )
-                }
-            }
+        pinDotsRow = dotsRow
+        for (i in 0 until initialDots) {
+            val dot = createPinDotView()
             pinDots.add(dot)
             dotsRow.addView(dot)
         }
@@ -410,11 +464,15 @@ class LockOverlayActivity : AppCompatActivity() {
                             }
                             "✓" -> verifyAndUnlock(pinBuffer.toString())
                             else -> {
-                                if (pinBuffer.length < 6) {
+                                if (pinBuffer.length < maxLen) {
                                     pinBuffer.append(label)
                                     updatePinDots()
                                     if (pinBuffer.length >= 4 && tryVerifySilent(pinBuffer.toString())) {
                                         completeUnlock()
+                                    } else if (expectedPinLength in 4..8 && pinBuffer.length == expectedPinLength) {
+                                        errorTv.text = "ভুল পিন! আবার চেষ্টা করুন"
+                                        pinBuffer.clear()
+                                        updatePinDots()
                                     }
                                 }
                             }
@@ -428,6 +486,19 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun updatePinDots() {
+        val row = pinDotsRow
+        if (expectedPinLength == 0 && row != null) {
+            val targetCount = maxOf(4, pinBuffer.length)
+            while (pinDots.size < targetCount) {
+                val extra = createPinDotView()
+                pinDots.add(extra)
+                row.addView(extra)
+            }
+            while (pinDots.size > targetCount) {
+                val removed = pinDots.removeAt(pinDots.lastIndex)
+                row.removeView(removed)
+            }
+        }
         for (i in pinDots.indices) {
             val active = i < pinBuffer.length
             pinDots[i].background = UiStyleHelper.circleBox(
@@ -519,6 +590,7 @@ class LockOverlayActivity : AppCompatActivity() {
                 bottomMargin = UiStyleHelper.dp(this@LockOverlayActivity, 14)
             }
         }
+        passwordInputView = input
 
         val unlockBtn = UiStyleHelper.actionButton(
             this,
@@ -553,6 +625,8 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun completeUnlock() {
+        hideSoftKeyboard()
+        biometricPromptActive = false
         foregroundActive = false
         currentTargetPkg = null
         if (lockMode == MODE_LIMIT_REACHED) {
@@ -578,6 +652,7 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun triggerBiometricPrompt(appLabel: String) {
+        biometricPromptActive = true
         val executor = ContextCompat.getMainExecutor(this)
         val prompt = BiometricPrompt(
             this,
@@ -585,7 +660,17 @@ class LockOverlayActivity : AppCompatActivity() {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
+                    biometricPromptActive = false
                     completeUnlock()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    biometricPromptActive = false
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
                 }
             }
         )
@@ -602,6 +687,8 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun goHome() {
+        hideSoftKeyboard()
+        biometricPromptActive = false
         foregroundActive = false
         currentTargetPkg = null
         AppLockAccessibilityService.clearOverlayState()

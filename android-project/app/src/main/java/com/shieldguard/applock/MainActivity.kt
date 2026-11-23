@@ -13,6 +13,8 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -68,6 +70,17 @@ class MainActivity : AppCompatActivity() {
             PrefsManager.TYPE_PASSWORD -> "পাসওয়ার্ড"
             else -> "পিন"
         }
+    }
+
+    private fun hideSoftKeyboard(targetView: View? = null) {
+        try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            val token = targetView?.windowToken ?: currentFocus?.windowToken ?: window.decorView.windowToken
+            if (token != null) {
+                imm?.hideSoftInputFromWindow(token, 0)
+            }
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        } catch (_: Exception) {}
     }
 
     // -------------------------------------------------------------------------
@@ -241,6 +254,9 @@ class MainActivity : AppCompatActivity() {
                 prefs.setAppLockCredential(chosenAppSecret, chosenAppType)
             }
             prefs.setBiometricEnabled(bioSwitch.isChecked)
+            if (bioSwitch.isChecked) {
+                prefs.markBiometricEnrolledInApp(true)
+            }
             vaultUnlocked = true
             showDashboard()
         }
@@ -364,6 +380,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 val btn = UiStyleHelper.actionButton(this, "ভল্ট আনলক করুন") {
                     if (prefs.verifyVaultPassword(input.text.toString())) {
+                        input.clearFocus()
+                        hideSoftKeyboard(input)
                         vaultUnlocked = true
                         showDashboard()
                     } else {
@@ -375,24 +393,43 @@ class MainActivity : AppCompatActivity() {
                 centerArea.addView(card)
             }
             else -> {
+                val expectedVaultPinLen = prefs.getVaultPinLength()
+                val initialDots = if (expectedVaultPinLen in 4..8) expectedVaultPinLen else 4
+                val maxVaultLen = if (expectedVaultPinLen in 4..8) expectedVaultPinLen else 6
+
                 val dotsRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER
                     setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 16))
                 }
-                for (i in 0 until 6) {
-                    val dot = View(this).apply {
+                fun makeDot(): View {
+                    return View(this).apply {
                         background = UiStyleHelper.circleBox(this@MainActivity, UiStyleHelper.BG_CARD, UiStyleHelper.BORDER_GLOW, 2)
-                        layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 13), UiStyleHelper.dp(this@MainActivity, 13)).apply {
-                            setMargins(UiStyleHelper.dp(this@MainActivity, 7), 0, UiStyleHelper.dp(this@MainActivity, 7), 0)
+                        layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 14)).apply {
+                            setMargins(UiStyleHelper.dp(this@MainActivity, 8), 0, UiStyleHelper.dp(this@MainActivity, 8), 0)
                         }
                     }
+                }
+                for (i in 0 until initialDots) {
+                    val dot = makeDot()
                     dots.add(dot)
                     dotsRow.addView(dot)
                 }
                 centerArea.addView(dotsRow)
 
                 val updateDots = {
+                    if (expectedVaultPinLen == 0) {
+                        val targetCount = maxOf(4, pinBuffer.length)
+                        while (dots.size < targetCount) {
+                            val extra = makeDot()
+                            dots.add(extra)
+                            dotsRow.addView(extra)
+                        }
+                        while (dots.size > targetCount) {
+                            val removed = dots.removeAt(dots.lastIndex)
+                            dotsRow.removeView(removed)
+                        }
+                    }
                     for (i in dots.indices) {
                         val on = i < pinBuffer.length
                         dots[i].background = UiStyleHelper.circleBox(
@@ -457,12 +494,16 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                     else -> {
-                                        if (pinBuffer.length < 6) {
+                                        if (pinBuffer.length < maxVaultLen) {
                                             pinBuffer.append(k)
                                             updateDots()
                                             if (pinBuffer.length >= 4 && prefs.verifyVaultPassword(pinBuffer.toString())) {
                                                 vaultUnlocked = true
                                                 showDashboard()
+                                            } else if (expectedVaultPinLen in 4..8 && pinBuffer.length == expectedVaultPinLen) {
+                                                errTv.text = "ভুল ভল্ট পিন!"
+                                                pinBuffer.clear()
+                                                updateDots()
                                             }
                                         }
                                     }
@@ -480,7 +521,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll)
 
         // Compact Fingerprint Circle at bottom (tap to unlock, never auto-pops!)
-        if (canUseBiometric() && prefs.isBiometricEnabled()) {
+        if (canUseBiometric() && prefs.isBiometricAllowedForVault()) {
             val bioRow = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
@@ -512,6 +553,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         setContentView(root)
+        if (lockType != PrefsManager.TYPE_PASSWORD) {
+            hideSoftKeyboard()
+        }
     }
 
     private fun promptBiometricForVault() {
@@ -1125,9 +1169,15 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 12))
         })
 
+        val vaultLen = prefs.getVaultPinLength()
+        val vaultSub = if (prefs.getVaultLockType() == PrefsManager.TYPE_PIN && vaultLen > 0) {
+            "বর্তমান: পিন ($vaultLen ডিজিট)"
+        } else {
+            "বর্তমান: ${lockTypeBn(prefs.getVaultLockType())}"
+        }
         lockCard.addView(makeSettingActionRow(
             "ভল্ট মাস্টার লক",
-            "বর্তমান: ${lockTypeBn(prefs.getVaultLockType())}",
+            vaultSub,
             "পরিবর্তন"
         ) {
             openCredentialCreatorDialog("ভল্ট লক পরিবর্তন") { s, t ->
@@ -1137,9 +1187,15 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        val appLen = prefs.getGlobalAppPinLength()
+        val appSub = if (prefs.getGlobalAppLockType() == PrefsManager.TYPE_PIN && appLen > 0) {
+            "বর্তমান: পিন ($appLen ডিজিট)"
+        } else {
+            "বর্তমান: ${lockTypeBn(prefs.getGlobalAppLockType())}"
+        }
         lockCard.addView(makeSettingActionRow(
             "ডিফল্ট অ্যাপ-লক",
-            "বর্তমান: ${lockTypeBn(prefs.getGlobalAppLockType())}",
+            appSub,
             "পরিবর্তন"
         ) {
             openCredentialCreatorDialog("ডিফল্ট অ্যাপ-লক পরিবর্তন") { s, t ->
@@ -1162,34 +1218,142 @@ class MainActivity : AppCompatActivity() {
         })
         body.addView(lockCard)
 
+        val bioStatusCode = getBiometricStatusCode()
+        val bioReady = bioStatusCode == BiometricManager.BIOMETRIC_SUCCESS
+        val bioEnrolledApp = prefs.isBiometricEnrolledInApp() || prefs.isBiometricEnabled()
+
         val bioCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20)
+            background = UiStyleHelper.cardGradientBox(
+                this@MainActivity,
+                20,
+                if (bioEnrolledApp && bioReady) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_SUBTLE
+            )
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 14)
             }
         }
-        bioCard.addView(SwitchCompat(this).apply {
-            text = "ফিঙ্গারপ্রিন্ট ও ফেস আনলক চালু রাখুন"
-            isChecked = prefs.isBiometricEnabled()
-            setTextColor(UiStyleHelper.TEXT_PRIMARY)
-            textSize = 14.5f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setOnCheckedChangeListener { _, checked ->
-                prefs.setBiometricEnabled(checked)
-                Toast.makeText(
-                    this@MainActivity,
-                    if (checked) "নিচে ফিঙ্গারপ্রিন্ট আইকন চালু হয়েছে" else "ফিঙ্গারপ্রিন্ট বন্ধ হয়েছে",
-                    Toast.LENGTH_SHORT
-                ).show()
+        val bioHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 10))
+        }
+        bioHeader.addView(UiStyleHelper.fingerprintIconView(
+            this,
+            26,
+            if (bioEnrolledApp && bioReady) UiStyleHelper.ACCENT_GREEN else UiStyleHelper.ACCENT_BLUE
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 26), UiStyleHelper.dp(this@MainActivity, 26)).apply {
+                rightMargin = UiStyleHelper.dp(this@MainActivity, 10)
             }
         })
+        bioHeader.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(this@MainActivity).apply {
+                text = "ফিঙ্গারপ্রিন্ট ও বায়োমেট্রিক ভল্ট"
+                textSize = 15.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(UiStyleHelper.TEXT_PRIMARY)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = when {
+                    bioStatusCode == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
+                        "ফোনের সেটিংসে এখনো ফিঙ্গারপ্রিন্ট যোগ করা নেই"
+                    !bioReady ->
+                        "এই ডিভাইসে বায়োমেট্রিক পাওয়া যায়নি"
+                    bioEnrolledApp ->
+                        "✓ অ্যাপের ভিতরে ফিঙ্গারপ্রিন্ট সংরক্ষিত ও সক্রিয়"
+                    else ->
+                        "অ্যাপ ও ভল্ট আনলকের জন্য নতুন করে ফিঙ্গার যাচাই করুন"
+                }
+                textSize = 12f
+                setTextColor(if (bioEnrolledApp && bioReady) UiStyleHelper.ACCENT_GREEN else UiStyleHelper.TEXT_SECONDARY)
+            })
+        })
+        bioCard.addView(bioHeader)
+
+        if (bioStatusCode == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
+            bioCard.addView(UiStyleHelper.actionButton(
+                this,
+                "ফোনের সেটিংস থেকে ফিঙ্গারপ্রিন্ট যোগ করুন",
+                UiStyleHelper.ACCENT_AMBER,
+                UiStyleHelper.ACCENT_AMBER
+            ) {
+                openSystemBiometricSettings()
+            })
+        } else if (bioReady) {
+            bioCard.addView(UiStyleHelper.actionButton(
+                this,
+                if (bioEnrolledApp) "নতুন করে ফিঙ্গারপ্রিন্ট সেভ / পুনরায় যাচাই করুন" else "ফিঙ্গারপ্রিন্ট সেভ ও সক্রিয় করুন",
+                UiStyleHelper.ACCENT_BLUE,
+                UiStyleHelper.ACCENT_BLUE_DEEP
+            ) {
+                promptRegisterFingerprintInApp()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, UiStyleHelper.dp(this@MainActivity, 46)).apply {
+                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
+                }
+            })
+
+            bioCard.addView(SwitchCompat(this).apply {
+                text = "লক করা অ্যাপ খুলতে ফিঙ্গারপ্রিন্ট চালু রাখুন"
+                isChecked = prefs.isBiometricEnabled() && prefs.isBiometricForApps()
+                setTextColor(UiStyleHelper.TEXT_PRIMARY)
+                textSize = 13.5f
+                setOnCheckedChangeListener { _, checked ->
+                    if (checked && !prefs.isBiometricEnrolledInApp()) {
+                        isChecked = false
+                        promptRegisterFingerprintInApp()
+                        return@setOnCheckedChangeListener
+                    }
+                    prefs.setBiometricForApps(checked)
+                    prefs.setBiometricEnabled(checked || prefs.isBiometricForVault())
+                }
+            })
+
+            bioCard.addView(SwitchCompat(this).apply {
+                text = "ShieldGuard ভল্ট খুলতে ফিঙ্গারপ্রিন্ট চালু রাখুন"
+                isChecked = prefs.isBiometricEnabled() && prefs.isBiometricForVault()
+                setTextColor(UiStyleHelper.TEXT_PRIMARY)
+                textSize = 13.5f
+                setOnCheckedChangeListener { _, checked ->
+                    if (checked && !prefs.isBiometricEnrolledInApp()) {
+                        isChecked = false
+                        promptRegisterFingerprintInApp()
+                        return@setOnCheckedChangeListener
+                    }
+                    prefs.setBiometricForVault(checked)
+                    prefs.setBiometricEnabled(checked || prefs.isBiometricForApps())
+                }
+            })
+
+            if (bioEnrolledApp) {
+                bioCard.addView(UiStyleHelper.actionButton(
+                    this,
+                    "অ্যাপ থেকে ফিঙ্গারপ্রিন্ট আনলক বন্ধ ও রিসেট করুন",
+                    UiStyleHelper.ACCENT_ROSE_SOFT,
+                    UiStyleHelper.ACCENT_ROSE_SOFT,
+                    UiStyleHelper.ACCENT_ROSE,
+                    UiStyleHelper.ACCENT_ROSE,
+                    42
+                ) {
+                    prefs.markBiometricEnrolledInApp(false)
+                    Toast.makeText(this, "ফিঙ্গারপ্রিন্ট রিসেট করা হয়েছে", Toast.LENGTH_SHORT).show()
+                    showDashboard()
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, UiStyleHelper.dp(this@MainActivity, 42)).apply {
+                        topMargin = UiStyleHelper.dp(this@MainActivity, 10)
+                    }
+                })
+            }
+        }
         bioCard.addView(TextView(this).apply {
-            text = "চালু থাকলে লক স্ক্রিনের নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন দেখাবে — টাচ করলেই সাথে সাথে খুলবে। বন্ধ থাকলে দেখাবে না।"
-            textSize = 12f
+            text = "নোট: একবার যাচাই করলে লক স্ক্রিনের নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন দেখাবে—সেখানে টাচ করলেই সরাসরি আনলক হবে।"
+            textSize = 11.5f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
-            setPadding(0, UiStyleHelper.dp(this@MainActivity, 6), 0, 0)
+            setPadding(0, UiStyleHelper.dp(this@MainActivity, 8), 0, 0)
         })
         body.addView(bioCard)
 
@@ -1388,11 +1552,11 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 8))
             })
 
-            val limitValues = listOf(0 to "বন্ধ", 15 to "১৫ মি.", 30 to "৩০ মি.", 60 to "৬০ মি.", 120 to "১২০ মি.")
+            val limitValues = listOf(0 to "বন্ধ", 15 to "১৫ মি.", 30 to "৩০ মি.", 60 to "৬০ মি.")
             val limitRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 16)
+                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
                 }
             }
             for ((mins, label) in limitValues) {
@@ -1415,12 +1579,63 @@ class MainActivity : AppCompatActivity() {
                     }
                     setOnClickListener {
                         prefs.setDailyLimit(app.packageName, mins)
+                        hideSoftKeyboard()
                         dialog.dismiss()
                         showDashboard()
                     }
                 })
             }
             content.addView(limitRow)
+
+            // Custom minutes input row
+            val customLimitRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 16)
+                }
+            }
+            val customMinsEt = EditText(this).apply {
+                hint = "কাস্টম মিনিট (যেমন: 10 বা 45)"
+                if (app.dailyLimitMinutes > 0) {
+                    setText(app.dailyLimitMinutes.toString())
+                }
+                inputType = InputType.TYPE_CLASS_NUMBER
+                textSize = 13f
+                setTextColor(UiStyleHelper.TEXT_PRIMARY)
+                setHintTextColor(UiStyleHelper.TEXT_MUTED)
+                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 12, UiStyleHelper.BORDER_SUBTLE, 1)
+                setPadding(UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 10))
+                layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@MainActivity, 42), 1f).apply {
+                    rightMargin = UiStyleHelper.dp(this@MainActivity, 8)
+                }
+            }
+            val saveCustomLimitBtn = UiStyleHelper.actionButton(
+                this,
+                "সেট করুন",
+                UiStyleHelper.ACCENT_BLUE,
+                UiStyleHelper.ACCENT_BLUE_DEEP,
+                UiStyleHelper.TEXT_PRIMARY,
+                null,
+                42
+            ) {
+                val mins = customMinsEt.text.toString().trim().toIntOrNull()
+                if (mins == null || mins < 1 || mins > 1440) {
+                    Toast.makeText(this, "১ থেকে ১৪৪০ মিনিটের মধ্যে সংখ্যা লিখুন", Toast.LENGTH_SHORT).show()
+                    return@actionButton
+                }
+                prefs.setDailyLimit(app.packageName, mins)
+                customMinsEt.clearFocus()
+                hideSoftKeyboard(customMinsEt)
+                dialog.dismiss()
+                showDashboard()
+                Toast.makeText(this, "${app.appName}: দৈনিক ${mins} মিনিট সীমা সেট হয়েছে", Toast.LENGTH_SHORT).show()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 104), UiStyleHelper.dp(this@MainActivity, 42))
+            }
+            customLimitRow.addView(customMinsEt)
+            customLimitRow.addView(saveCustomLimitBtn)
+            content.addView(customLimitRow)
 
             content.addView(TextView(this).apply {
                 text = "এই অ্যাপের জন্য আলাদা লক"
@@ -1568,6 +1783,8 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
+                    input.clearFocus()
+                    hideSoftKeyboard(input)
                     dialog.dismiss()
                     onConfirmed(txt)
                 }
@@ -1630,12 +1847,72 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun canUseBiometric(): Boolean {
+    private fun getBiometricStatusCode(): Int {
         val bm = BiometricManager.from(this)
         return bm.canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or
                 BiometricManager.Authenticators.BIOMETRIC_WEAK
-        ) == BiometricManager.BIOMETRIC_SUCCESS
+        )
+    }
+
+    private fun canUseBiometric(): Boolean {
+        return getBiometricStatusCode() == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    private fun openSystemBiometricSettings() {
+        try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Intent(Settings.ACTION_BIOMETRIC_ENROLL).apply {
+                    putExtra(
+                        Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED,
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.BIOMETRIC_WEAK
+                    )
+                }
+            } else {
+                Intent(Settings.ACTION_SECURITY_SETTINGS)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun promptRegisterFingerprintInApp() {
+        val executor = ContextCompat.getMainExecutor(this)
+        val prompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    prefs.markBiometricEnrolledInApp(true)
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✓ ফিঙ্গারপ্রিন্ট সফলভাবে সেভ ও চালু হয়েছে!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    showDashboard()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    Toast.makeText(this@MainActivity, "যাচাই সম্পন্ন হয়নি: $errString", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("অ্যাপে ফিঙ্গারপ্রিন্ট সেভ করুন")
+            .setSubtitle("ভল্ট ও অ্যাপ আনলকের জন্য আঙুল স্পর্শ করে নিশ্চিত করুন")
+            .setNegativeButtonText("বাতিল")
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+            )
+            .build()
+        prompt.authenticate(info)
     }
 
     private fun hasUsageStatsPermission(): Boolean {
