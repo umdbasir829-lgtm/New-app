@@ -1,6 +1,7 @@
 package com.shieldguard.applock
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -25,26 +26,51 @@ class AppLockAccessibilityService : AccessibilityService() {
         @Volatile
         private var lastOverlayLaunchTime: Long = 0L
 
+        @Volatile
+        private var lastObservedForegroundPkg: String? = null
+
         fun markSessionUnlocked(pkg: String) {
             currentSessionUnlockedPkg = pkg
             lastOverlayLaunchedPkg = null
+            lastOverlayLaunchTime = 0L
         }
 
         fun clearOverlayState() {
             lastOverlayLaunchedPkg = null
+            lastOverlayLaunchTime = 0L
         }
     }
 
     private lateinit var prefs: PrefsManager
     private var imePackages: Set<String> = emptySet()
 
-    private val screenOffReceiver = object : BroadcastReceiver() {
+    private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                currentSessionUnlockedPkg = null
-                lastOverlayLaunchedPkg = null
-                prefs.clearAllSessionUnlocks()
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    currentSessionUnlockedPkg = null
+                    lastOverlayLaunchedPkg = null
+                    lastOverlayLaunchTime = 0L
+                    prefs.clearAllSessionUnlocks()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                    if (km?.isKeyguardLocked == true) return
+                    recheckForegroundLock()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    recheckForegroundLock()
+                }
             }
+        }
+    }
+
+    private fun recheckForegroundLock() {
+        lastOverlayLaunchedPkg = null
+        lastOverlayLaunchTime = 0L
+        val fgPkg = lastObservedForegroundPkg
+        if (!fgPkg.isNullOrBlank() && !isIgnoredSystemPackage(fgPkg)) {
+            evaluatePackageLock(fgPkg)
         }
     }
 
@@ -53,10 +79,14 @@ class AppLockAccessibilityService : AccessibilityService() {
         prefs = PrefsManager(this)
         isRunning = true
         refreshImePackages()
-        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
         ContextCompat.registerReceiver(
             this,
-            screenOffReceiver,
+            screenStateReceiver,
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
@@ -65,7 +95,7 @@ class AppLockAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         isRunning = false
         try {
-            unregisterReceiver(screenOffReceiver)
+            unregisterReceiver(screenStateReceiver)
         } catch (_: Exception) {}
         super.onDestroy()
     }
@@ -90,6 +120,8 @@ class AppLockAccessibilityService : AccessibilityService() {
 
         if (isIgnoredSystemPackage(pkg)) return
 
+        lastObservedForegroundPkg = pkg
+
         val relockMode = prefs.getRelockMode()
         if (relockMode == PrefsManager.RELOCK_IMMEDIATE) {
             if (currentSessionUnlockedPkg != null && pkg != currentSessionUnlockedPkg) {
@@ -101,6 +133,13 @@ class AppLockAccessibilityService : AccessibilityService() {
             lastOverlayLaunchedPkg = null
         }
 
+        evaluatePackageLock(pkg)
+    }
+
+    private fun evaluatePackageLock(pkg: String) {
+        if (LockOverlayActivity.isForegroundFor(pkg)) return
+
+        val relockMode = prefs.getRelockMode()
         val lockedApps = prefs.getLockedApps()
         val limits = prefs.getDailyLimits()
         val limitMinutes = limits[pkg] ?: 0
@@ -128,7 +167,7 @@ class AppLockAccessibilityService : AccessibilityService() {
 
     private fun launchLockIfNotDebounced(pkg: String, mode: String, usedMinutes: Int, limitMinutes: Int) {
         val now = System.currentTimeMillis()
-        if (lastOverlayLaunchedPkg == pkg && (now - lastOverlayLaunchTime) < 1200L) {
+        if (lastOverlayLaunchedPkg == pkg && (now - lastOverlayLaunchTime) < 900L) {
             return
         }
         lastOverlayLaunchedPkg = pkg
@@ -138,7 +177,7 @@ class AppLockAccessibilityService : AccessibilityService() {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
             )
             putExtra(LockOverlayActivity.EXTRA_PACKAGE_NAME, pkg)
             putExtra(LockOverlayActivity.EXTRA_MODE, mode)

@@ -84,11 +84,15 @@ object UpdateManager {
                         }
                     }
                 }
-                val parsedBuild = tag.substringAfterLast(".", "0").toIntOrNull() ?: 0
+                val parsedBuild = if (tag.contains("-b")) {
+                    tag.substringAfter("-b").substringBefore(".").toIntOrNull() ?: 0
+                } else {
+                    0
+                }
                 if (apkAssetUrl != null && parsedBuild > BuildConfig.VERSION_CODE) {
                     return@withContext UpdateCheckResult(
                         hasUpdate = true,
-                        latestVersionName = tag.ifBlank { "New Release" },
+                        latestVersionName = tag.substringBefore("-b").ifBlank { "New Release" },
                         latestVersionCode = parsedBuild,
                         changelog = notes,
                         apkDownloadUrl = apkAssetUrl

@@ -9,7 +9,8 @@ import java.security.MessageDigest
 
 data class LockCredential(
     val type: String, // TYPE_PIN | TYPE_PATTERN | TYPE_PASSWORD
-    val hash: String
+    val hash: String,
+    val allowBiometric: Boolean = false
 )
 
 class PrefsManager(context: Context) {
@@ -117,21 +118,36 @@ class PrefsManager(context: Context) {
         val obj = root.optJSONObject(packageName) ?: return null
         val type = obj.optString("type", "")
         val hash = obj.optString("hash", "")
+        val allowBio = obj.optBoolean("allowBiometric", false)
         if (type.isBlank() || hash.isBlank()) return null
-        return LockCredential(type, hash)
+        return LockCredential(type, hash, allowBio)
     }
 
     fun hasCustomAppLock(packageName: String): Boolean = getCustomAppLock(packageName) != null
 
-    fun setCustomAppLock(packageName: String, rawSecret: String, type: String) {
+    fun setCustomAppLock(
+        packageName: String,
+        rawSecret: String,
+        type: String,
+        allowBiometric: Boolean = false
+    ) {
         val root = getPerAppLocksObject()
         val entry = JSONObject().apply {
             put("type", type)
             put("hash", sha256(rawSecret))
+            put("allowBiometric", allowBiometric)
         }
         root.put(packageName, entry)
         prefs.edit().putString(KEY_PER_APP_LOCKS_JSON, root.toString()).apply()
         setAppLocked(packageName, true)
+    }
+
+    fun setCustomAppBiometric(packageName: String, allowBiometric: Boolean) {
+        val root = getPerAppLocksObject()
+        val obj = root.optJSONObject(packageName) ?: return
+        obj.put("allowBiometric", allowBiometric)
+        root.put(packageName, obj)
+        prefs.edit().putString(KEY_PER_APP_LOCKS_JSON, root.toString()).apply()
     }
 
     fun removeCustomAppLock(packageName: String) {
@@ -144,6 +160,12 @@ class PrefsManager(context: Context) {
         return getCustomAppLock(packageName)?.type ?: getGlobalAppLockType()
     }
 
+    fun isBiometricAllowedForApp(packageName: String): Boolean {
+        if (!isBiometricEnabled()) return false
+        val custom = getCustomAppLock(packageName) ?: return true
+        return custom.allowBiometric
+    }
+
     fun verifyAppUnlock(packageName: String, rawSecret: String): Boolean {
         val custom = getCustomAppLock(packageName)
         if (custom != null) {
@@ -152,8 +174,8 @@ class PrefsManager(context: Context) {
         return verifyGlobalAppLock(rawSecret)
     }
 
-    // --- Biometric & Relock Mode ---
-    fun isBiometricEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, true)
+    // --- Biometric (Explicit Opt-In: Defaults to FALSE) & Relock Mode ---
+    fun isBiometricEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     fun setBiometricEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
@@ -199,14 +221,6 @@ class PrefsManager(context: Context) {
         val obj = JSONObject(prefs.getString(KEY_UNLOCKED_UNTIL, "{}") ?: "{}")
         obj.put(packageName, System.currentTimeMillis() + durationMillis)
         prefs.edit().putString(KEY_UNLOCKED_UNTIL, obj.toString()).apply()
-    }
-
-    fun revokeTemporaryUnlock(packageName: String) {
-        val obj = JSONObject(prefs.getString(KEY_UNLOCKED_UNTIL, "{}") ?: "{}")
-        if (obj.has(packageName)) {
-            obj.remove(packageName)
-            prefs.edit().putString(KEY_UNLOCKED_UNTIL, obj.toString()).apply()
-        }
     }
 
     fun clearAllSessionUnlocks() {

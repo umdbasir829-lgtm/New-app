@@ -160,11 +160,11 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 3,
-        versionName: '2.1.0',
+        versionCode: 4,
+        versionName: '2.2.0',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'v2.1.0: অ্যাপ খুললেই অটো আপডেট চেক, লাইভ ওয়েব কন্ট্রোল, ফিঙ্গারপ্রিন্ট/ফেস, প্যাটার্ন, সুন্দর পিন কিপ্যাড ও প্রতিটা অ্যাপে আলাদা পাসওয়ার্ড!',
+        changelog: 'v2.2.0: আধুনিক ডার্ক হোম ডিজাইন, স্ক্রিন অফ/অন বাইপাস ফিক্স, আনলক করলে সরাসরি কাঙ্ক্ষিত অ্যাপ ওপেন ও অপশনাল ফিঙ্গারপ্রিন্ট কন্ট্রোল!',
         apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
     };
@@ -173,13 +173,13 @@ function readStore(): VaultStore {
   }
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
   const parsed = JSON.parse(raw) as VaultStore;
-  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 3) {
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 4) {
     parsed.releaseManifest = {
-      versionCode: 3,
-      versionName: '2.1.0',
+      versionCode: 4,
+      versionName: '2.2.0',
       policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
       publishedAt: new Date().toISOString(),
-      changelog: 'v2.1.0: অ্যাপ খুললেই অটো আপডেট চেক, লাইভ ওয়েব কন্ট্রোল, ফিঙ্গারপ্রিন্ট/ফেস, প্যাটার্ন, সুন্দর পিন কিপ্যাড ও প্রতিটা অ্যাপে আলাদা পাসওয়ার্ড!',
+      changelog: 'v2.2.0: আধুনিক ডার্ক হোম ডিজাইন, স্ক্রিন অফ/অন বাইপাস ফিক্স, আনলক করলে সরাসরি কাঙ্ক্ষিত অ্যাপ ওপেন ও অপশনাল ফিঙ্গারপ্রিন্ট কন্ট্রোল!',
       apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
     };
     writeStore(parsed);
