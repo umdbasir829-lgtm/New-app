@@ -36,19 +36,13 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Cache Android Debug Keystore for In-Place OTA Updates
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/.android/debug.keystore
-          key: shieldguard-debug-keystore-v2
+      - name: Verify Fixed OTA Signing Keystore
+        run: |
+          ls -lh app/debug.keystore
+          keytool -list -v -keystore app/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep -E "SHA1:|SHA256:"
 
       - name: Build Debug APK
         run: gradle assembleDebug --no-daemon
-
-      - name: Verify Debug Keystore
-        run: |
-          ls -lh /home/runner/.android/debug.keystore || true
-          keytool -list -v -keystore /home/runner/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android 2>/dev/null | grep -E "SHA1:|SHA256:" || true
 
       - name: Rename APK Artifact
         run: cp app/build/outputs/apk/debug/app-debug.apk ShieldGuard-AppLock.apk

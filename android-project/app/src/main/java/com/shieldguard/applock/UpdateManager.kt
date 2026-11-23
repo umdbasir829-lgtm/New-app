@@ -175,22 +175,41 @@ object UpdateManager {
             return@withContext
         }
 
+        withContext(Dispatchers.Main) {
+            android.widget.Toast.makeText(
+                context,
+                "নতুন আপডেট ডাউনলোড হচ্ছে, একটু অপেক্ষা করুন...",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+
         try {
             val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val tempFile = File(updatesDir, "ShieldGuard-update.apk.tmp")
             val apkFile = File(updatesDir, "ShieldGuard-update.apk")
+            if (tempFile.exists()) tempFile.delete()
 
             val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = true
-                connectTimeout = 15000
-                readTimeout = 30000
+                setRequestProperty("User-Agent", "ShieldGuardAppLock")
+                connectTimeout = 20000
+                readTimeout = 90000
             }
             if (conn.responseCode !in 200..299) {
                 throw IllegalStateException("HTTP ${conn.responseCode}")
             }
             conn.inputStream.use { input ->
-                FileOutputStream(apkFile).use { output ->
+                FileOutputStream(tempFile).use { output ->
                     input.copyTo(output)
                 }
+            }
+            if (tempFile.length() < 100_000L) {
+                throw IllegalStateException("Incomplete APK download")
+            }
+            if (apkFile.exists()) apkFile.delete()
+            if (!tempFile.renameTo(apkFile)) {
+                tempFile.copyTo(apkFile, overwrite = true)
+                tempFile.delete()
             }
 
             val apkUri = FileProvider.getUriForFile(
@@ -208,6 +227,11 @@ object UpdateManager {
             }
         } catch (_: Exception) {
             withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    context,
+                    "সরাসরি ডাউনলোড ব্যর্থ—ব্রাউজার থেকে APK খোলা হচ্ছে",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
