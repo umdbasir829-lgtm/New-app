@@ -1039,6 +1039,8 @@ class MainActivity : AppCompatActivity() {
             badgesRow.addView(TextView(this).apply {
                 text = "আজ: ${app.usedMinutesToday} মি."
                 textSize = 11.5f
+                setSingleLine(true)
+                maxLines = 1
                 setTextColor(UiStyleHelper.TEXT_SECONDARY)
                 setPadding(0, 0, UiStyleHelper.dp(this@MainActivity, 6), 0)
             })

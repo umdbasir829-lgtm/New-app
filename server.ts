@@ -179,11 +179,11 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 5,
-        versionName: '2.3.0',
+        versionCode: 6,
+        versionName: '2.3.1',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'v2.3.0: কীপ্যাড বাটন ক্লিপিং ফিক্স, নিচে ছোট টাচ-টু-আনলক ফিঙ্গারপ্রিন্ট আইকন (অটো পপ-আপ বন্ধ), লাইভ OTA সিঙ্ক ও প্রিমিয়াম গ্র্যাডিয়েন্ট ডিজাইন!',
+        changelog: 'v2.3.1: স্থায়ী সাইনিং কী ক্যাশ ফিক্স, ব্যাজ টেক্সট র‍্যাপিং ফিক্স, কীপ্যাড ক্লিপিং ফিক্স ও নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন!',
         apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
       runtimeConfig: DEFAULT_RUNTIME_CONFIG,
@@ -194,13 +194,13 @@ function readStore(): VaultStore {
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
   const parsed = JSON.parse(raw) as VaultStore;
   let dirty = false;
-  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 5) {
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 6) {
     parsed.releaseManifest = {
-      versionCode: 5,
-      versionName: '2.3.0',
+      versionCode: 6,
+      versionName: '2.3.1',
       policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
       publishedAt: new Date().toISOString(),
-      changelog: 'v2.3.0: কীপ্যাড বাটন ক্লিপিং ফিক্স, নিচে ছোট টাচ-টু-আনলক ফিঙ্গারপ্রিন্ট আইকন (অটো পপ-আপ বন্ধ), লাইভ OTA সিঙ্ক ও প্রিমিয়াম গ্র্যাডিয়েন্ট ডিজাইন!',
+      changelog: 'v2.3.1: স্থায়ী সাইনিং কী ক্যাশ ফিক্স, ব্যাজ টেক্সট র‍্যাপিং ফিক্স, কীপ্যাড ক্লিপিং ফিক্স ও নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন!',
       apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
     };
     dirty = true;

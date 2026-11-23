@@ -11,8 +11,8 @@ android {
         applicationId = "com.shieldguard.applock"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "2.3.0"
+        versionCode = 6
+        versionName = "2.3.1"
 
         buildConfigField("String", "OTA_SERVER_URL", "\"https://ais-pre-5pcn7zy4w5ncujr7kjxthh-910762661731.asia-northeast1.run.app\"")
     }

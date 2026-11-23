@@ -188,6 +188,8 @@ object UiStyleHelper {
         return TextView(context).apply {
             text = label
             textSize = 11f
+            setSingleLine(true)
+            maxLines = 1
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(textColor)
             background = roundedBox(context, bgColor, 9, strokeColor, 1)
