@@ -111,25 +111,51 @@ object UpdateManager {
     }
 
     suspend fun syncRemotePolicies(serverBaseUrl: String, prefs: PrefsManager): Int = withContext(Dispatchers.IO) {
-        val endpoint = "$serverBaseUrl/api/state"
-        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 6000
-            readTimeout = 6000
-        }
-        if (conn.responseCode !in 200..299) return@withContext 0
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
-        val json = JSONObject(body)
-        val apps = json.optJSONArray("apps") ?: return@withContext 0
         var syncedCount = 0
-        for (i in 0 until apps.length()) {
-            val item = apps.getJSONObject(i)
-            val pkg = item.optString("packageName")
-            if (pkg.isBlank()) continue
-            prefs.setAppLocked(pkg, item.optBoolean("isLocked", false))
-            prefs.setDailyLimit(pkg, item.optInt("dailyLimitMinutes", 0))
-            syncedCount++
-        }
+        try {
+            val stateEndpoint = "$serverBaseUrl/api/state"
+            val conn = (URL(stateEndpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            if (conn.responseCode in 200..299) {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                val apps = json.optJSONArray("apps")
+                if (apps != null) {
+                    for (i in 0 until apps.length()) {
+                        val item = apps.getJSONObject(i)
+                        val pkg = item.optString("packageName")
+                        if (pkg.isBlank()) continue
+                        prefs.setAppLocked(pkg, item.optBoolean("isLocked", false))
+                        prefs.setDailyLimit(pkg, item.optInt("dailyLimitMinutes", 0))
+                        syncedCount++
+                    }
+                }
+                val rc = json.optJSONObject("runtimeConfig")
+                if (rc != null && prefs.saveRuntimeConfig(rc)) {
+                    syncedCount++
+                }
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val cfgEndpoint = "$serverBaseUrl/api/ota/runtime-config"
+            val cfgConn = (URL(cfgEndpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            if (cfgConn.responseCode in 200..299) {
+                val body = cfgConn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                if (prefs.saveRuntimeConfig(json)) {
+                    syncedCount++
+                }
+            }
+        } catch (_: Exception) {}
+
         syncedCount
     }
 

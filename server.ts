@@ -32,6 +32,15 @@ interface ReleaseManifest {
   apkUrl: string;
 }
 
+interface RuntimeConfig {
+  configVersion: number;
+  accentBlue: string;
+  accentGreen: string;
+  homeAnnouncement: string;
+  lockSubtitle: string;
+  heroActiveTitle: string;
+}
+
 interface VaultStore {
   vaultPasswordHash: string | null;
   vaultSalt: string | null;
@@ -40,7 +49,17 @@ interface VaultStore {
   appLockSalt: string | null;
   apps: ManagedApp[];
   releaseManifest: ReleaseManifest;
+  runtimeConfig?: RuntimeConfig;
 }
+
+const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
+  configVersion: 1,
+  accentBlue: '#3B82F6',
+  accentGreen: '#10B981',
+  homeAnnouncement: '',
+  lockSubtitle: 'প্রবেশ করতে আপনার লক যাচাই করুন',
+  heroActiveTitle: 'সুরক্ষা সম্পূর্ণ সক্রিয়',
+};
 
 const DEFAULT_APPS: ManagedApp[] = [
   {
@@ -160,28 +179,37 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 4,
-        versionName: '2.2.0',
+        versionCode: 5,
+        versionName: '2.3.0',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'v2.2.0: আধুনিক ডার্ক হোম ডিজাইন, স্ক্রিন অফ/অন বাইপাস ফিক্স, আনলক করলে সরাসরি কাঙ্ক্ষিত অ্যাপ ওপেন ও অপশনাল ফিঙ্গারপ্রিন্ট কন্ট্রোল!',
+        changelog: 'v2.3.0: কীপ্যাড বাটন ক্লিপিং ফিক্স, নিচে ছোট টাচ-টু-আনলক ফিঙ্গারপ্রিন্ট আইকন (অটো পপ-আপ বন্ধ), লাইভ OTA সিঙ্ক ও প্রিমিয়াম গ্র্যাডিয়েন্ট ডিজাইন!',
         apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
+      runtimeConfig: DEFAULT_RUNTIME_CONFIG,
     };
     fs.writeFileSync(STORE_FILE, JSON.stringify(initial, null, 2), 'utf-8');
     return initial;
   }
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
   const parsed = JSON.parse(raw) as VaultStore;
-  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 4) {
+  let dirty = false;
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 5) {
     parsed.releaseManifest = {
-      versionCode: 4,
-      versionName: '2.2.0',
+      versionCode: 5,
+      versionName: '2.3.0',
       policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
       publishedAt: new Date().toISOString(),
-      changelog: 'v2.2.0: আধুনিক ডার্ক হোম ডিজাইন, স্ক্রিন অফ/অন বাইপাস ফিক্স, আনলক করলে সরাসরি কাঙ্ক্ষিত অ্যাপ ওপেন ও অপশনাল ফিঙ্গারপ্রিন্ট কন্ট্রোল!',
+      changelog: 'v2.3.0: কীপ্যাড বাটন ক্লিপিং ফিক্স, নিচে ছোট টাচ-টু-আনলক ফিঙ্গারপ্রিন্ট আইকন (অটো পপ-আপ বন্ধ), লাইভ OTA সিঙ্ক ও প্রিমিয়াম গ্র্যাডিয়েন্ট ডিজাইন!',
       apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
     };
+    dirty = true;
+  }
+  if (!parsed.runtimeConfig) {
+    parsed.runtimeConfig = DEFAULT_RUNTIME_CONFIG;
+    dirty = true;
+  }
+  if (dirty) {
     writeStore(parsed);
   }
   return parsed;
@@ -201,6 +229,7 @@ function sanitizeStore(store: VaultStore) {
     separateAppLockEnabled: store.separateAppLockEnabled,
     apps: store.apps,
     releaseManifest: store.releaseManifest,
+    runtimeConfig: store.runtimeConfig || DEFAULT_RUNTIME_CONFIG,
   };
 }
 
@@ -424,6 +453,27 @@ async function startServer() {
   app.get('/api/updates/latest', (_req, res) => {
     const store = readStore();
     res.json(store.releaseManifest);
+  });
+
+  app.get('/api/ota/runtime-config', (_req, res) => {
+    const store = readStore();
+    res.json(store.runtimeConfig || DEFAULT_RUNTIME_CONFIG);
+  });
+
+  app.post('/api/ota/runtime-config', (req, res) => {
+    const body = req.body as Partial<RuntimeConfig>;
+    const store = readStore();
+    const prev = store.runtimeConfig || DEFAULT_RUNTIME_CONFIG;
+    store.runtimeConfig = {
+      configVersion: prev.configVersion + 1,
+      accentBlue: typeof body.accentBlue === 'string' ? body.accentBlue : prev.accentBlue,
+      accentGreen: typeof body.accentGreen === 'string' ? body.accentGreen : prev.accentGreen,
+      homeAnnouncement: typeof body.homeAnnouncement === 'string' ? body.homeAnnouncement : prev.homeAnnouncement,
+      lockSubtitle: typeof body.lockSubtitle === 'string' ? body.lockSubtitle : prev.lockSubtitle,
+      heroActiveTitle: typeof body.heroActiveTitle === 'string' ? body.heroActiveTitle : prev.heroActiveTitle,
+    };
+    writeStore(store);
+    res.json({ ok: true, runtimeConfig: store.runtimeConfig });
   });
 
   app.post('/api/updates/publish', (req, res) => {

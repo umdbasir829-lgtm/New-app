@@ -50,7 +50,40 @@ class PrefsManager(context: Context) {
         private const val KEY_LIMITS_JSON = "daily_limits_json"
         private const val KEY_UNLOCKED_UNTIL = "temp_unlocked_until_json"
         private const val KEY_OTA_URL = "ota_server_url"
+        private const val KEY_RUNTIME_CONFIG_JSON = "ota_runtime_config_json"
     }
+
+    private fun getRuntimeConfigObject(): JSONObject {
+        val raw = prefs.getString(KEY_RUNTIME_CONFIG_JSON, "{}") ?: "{}"
+        return try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            JSONObject()
+        }
+    }
+
+    fun saveRuntimeConfig(json: JSONObject): Boolean {
+        val prevRaw = prefs.getString(KEY_RUNTIME_CONFIG_JSON, "{}") ?: "{}"
+        val nextRaw = json.toString()
+        prefs.edit().putString(KEY_RUNTIME_CONFIG_JSON, nextRaw).apply()
+        return prevRaw != nextRaw
+    }
+
+    fun getHomeAnnouncement(): String = getRuntimeConfigObject().optString("homeAnnouncement", "")
+
+    fun getLockSubtitle(): String {
+        val v = getRuntimeConfigObject().optString("lockSubtitle", "")
+        return if (v.isNotBlank()) v else "প্রবেশ করতে আপনার লক যাচাই করুন"
+    }
+
+    fun getHeroActiveTitle(): String {
+        val v = getRuntimeConfigObject().optString("heroActiveTitle", "")
+        return if (v.isNotBlank()) v else "সুরক্ষা সম্পূর্ণ সক্রিয়"
+    }
+
+    fun getRemoteAccentBlue(): String = getRuntimeConfigObject().optString("accentBlue", "#3B82F6")
+
+    fun getRemoteAccentGreen(): String = getRuntimeConfigObject().optString("accentGreen", "#10B981")
 
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))

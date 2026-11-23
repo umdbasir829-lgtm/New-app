@@ -42,7 +42,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PrefsManager(this)
-        window.statusBarColor = UiStyleHelper.BG_CANVAS
+        UiStyleHelper.applyRuntimeTheme(prefs)
+        window.statusBarColor = UiStyleHelper.BG_CANVAS_TOP
         window.navigationBarColor = UiStyleHelper.BG_SURFACE
 
         if (!prefs.isVaultPasswordSet()) {
@@ -70,60 +71,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------------------
-    // 1. INITIAL SETUP (CLEAN DARK CARDS + EXPLICIT BIOMETRIC OPT-IN)
+    // 1. INITIAL SETUP (PREMIUM GRADIENT CARDS + EXPLICIT BIOMETRIC OPT-IN)
     // -------------------------------------------------------------------------
     private fun showInitialSetup() {
-        val scroll = ScrollView(this).apply { setBackgroundColor(UiStyleHelper.BG_CANVAS) }
+        val scroll = ScrollView(this).apply { background = UiStyleHelper.canvasGradient() }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(
                 UiStyleHelper.dp(this@MainActivity, 20),
-                UiStyleHelper.dp(this@MainActivity, 36),
+                UiStyleHelper.dp(this@MainActivity, 32),
                 UiStyleHelper.dp(this@MainActivity, 20),
-                UiStyleHelper.dp(this@MainActivity, 36)
+                UiStyleHelper.dp(this@MainActivity, 32)
             )
         }
 
         val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            background = UiStyleHelper.roundedBox(
-                this@MainActivity,
-                UiStyleHelper.BG_CARD,
-                22,
-                UiStyleHelper.BORDER_SUBTLE,
-                1
-            )
-            setPadding(
-                UiStyleHelper.dp(this@MainActivity, 20),
-                UiStyleHelper.dp(this@MainActivity, 24),
-                UiStyleHelper.dp(this@MainActivity, 20),
-                UiStyleHelper.dp(this@MainActivity, 22)
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = UiStyleHelper.dp(this@MainActivity, 18) }
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 22, UiStyleHelper.BORDER_GLOW)
+            setPadding(UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 22), UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 20))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = UiStyleHelper.dp(this@MainActivity, 16)
+            }
         }
-        heroCard.addView(UiStyleHelper.shieldBadgeView(this, true, 54).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                UiStyleHelper.dp(this@MainActivity, 54),
-                UiStyleHelper.dp(this@MainActivity, 54)
-            ).apply { bottomMargin = UiStyleHelper.dp(this@MainActivity, 12) }
+        heroCard.addView(UiStyleHelper.shieldBadgeView(this, true, 52).apply {
+            layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 52), UiStyleHelper.dp(this@MainActivity, 52)).apply {
+                bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
+            }
         })
         heroCard.addView(TextView(this).apply {
             text = "ShieldGuard সুরক্ষা সেটআপ"
-            textSize = 21f
+            textSize = 20f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             gravity = Gravity.CENTER
         })
         heroCard.addView(TextView(this).apply {
             text = "ভল্ট ও অ্যাপের জন্য পিন, প্যাটার্ন বা পাসওয়ার্ড সেট করুন"
-            textSize = 13f
+            textSize = 12.5f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             gravity = Gravity.CENTER
-            setPadding(0, UiStyleHelper.dp(this@MainActivity, 6), 0, 0)
+            setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, 0)
         })
         root.addView(heroCard)
 
@@ -132,10 +120,9 @@ class MainActivity : AppCompatActivity() {
         var chosenAppSecret = ""
         var chosenAppType = PrefsManager.TYPE_PIN
 
-        // Step 1 Card: Vault Lock
         val vaultCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 18, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 18)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 12)
@@ -163,10 +150,9 @@ class MainActivity : AppCompatActivity() {
         vaultCard.addView(setVaultBtn)
         root.addView(vaultCard)
 
-        // Step 2 Card: Separate App-Lock
         val appLockCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 18, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 18)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 12)
@@ -209,10 +195,9 @@ class MainActivity : AppCompatActivity() {
         appLockCard.addView(setAppLockBtn)
         root.addView(appLockCard)
 
-        // Step 3 Card: Biometric Explicit Opt-In (Default OFF)
         val bioCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 18, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 18)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 14))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 18)
@@ -224,14 +209,13 @@ class MainActivity : AppCompatActivity() {
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             textSize = 13.5f
         }
-        val bioHintTv = TextView(this).apply {
-            text = "বন্ধ থাকলে কখনোই ফিঙ্গারপ্রিন্ট পপ-আপ আসবে না (পরে সেটিংস থেকে বদলানো যাবে)।"
+        bioCard.addView(bioSwitch)
+        bioCard.addView(TextView(this).apply {
+            text = "চালু থাকলে লক স্ক্রিনের নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন দেখাবে (টাচ করলেই খুলবে)।"
             textSize = 12f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, 0)
-        }
-        bioCard.addView(bioSwitch)
-        bioCard.addView(bioHintTv)
+        })
         root.addView(bioCard)
 
         val finishBtn = UiStyleHelper.actionButton(
@@ -241,7 +225,7 @@ class MainActivity : AppCompatActivity() {
             UiStyleHelper.ACCENT_GREEN,
             UiStyleHelper.TEXT_PRIMARY,
             null,
-            52
+            50
         ) {
             if (chosenVaultSecret.isBlank()) {
                 Toast.makeText(this@MainActivity, "প্রথমে ভল্ট লক সেট করুন", Toast.LENGTH_SHORT).show()
@@ -267,7 +251,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------------------
-    // 2. VAULT LOGIN SCREEN (RESPECTS BIOMETRIC OPT-IN)
+    // 2. VAULT LOGIN SCREEN (NO CLIPPING, COMPACT BOTTOM FINGERPRINT ICON)
     // -------------------------------------------------------------------------
     private fun showVaultLogin() {
         val lockType = prefs.getVaultLockType()
@@ -276,55 +260,64 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            background = UiStyleHelper.canvasGradient()
+        }
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+
+        val contentCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(UiStyleHelper.BG_CANVAS)
             setPadding(
-                UiStyleHelper.dp(this@MainActivity, 22),
-                UiStyleHelper.dp(this@MainActivity, 48),
-                UiStyleHelper.dp(this@MainActivity, 22),
-                UiStyleHelper.dp(this@MainActivity, 28)
+                UiStyleHelper.dp(this@MainActivity, 20),
+                UiStyleHelper.dp(this@MainActivity, 28),
+                UiStyleHelper.dp(this@MainActivity, 20),
+                UiStyleHelper.dp(this@MainActivity, 12)
             )
         }
 
         val headerCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 24, UiStyleHelper.BORDER_SUBTLE, 1)
-            setPadding(UiStyleHelper.dp(this@MainActivity, 22), UiStyleHelper.dp(this@MainActivity, 22), UiStyleHelper.dp(this@MainActivity, 22), UiStyleHelper.dp(this@MainActivity, 20))
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 22, UiStyleHelper.BORDER_GLOW)
+            setPadding(UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 18))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = UiStyleHelper.dp(this@MainActivity, 16)
+                bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
             }
         }
-        headerCard.addView(UiStyleHelper.shieldBadgeView(this, true, 52).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                UiStyleHelper.dp(this@MainActivity, 52),
-                UiStyleHelper.dp(this@MainActivity, 52)
-            ).apply { bottomMargin = UiStyleHelper.dp(this@MainActivity, 10) }
+        headerCard.addView(UiStyleHelper.shieldBadgeView(this, true, 46).apply {
+            layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 46), UiStyleHelper.dp(this@MainActivity, 46)).apply {
+                bottomMargin = UiStyleHelper.dp(this@MainActivity, 8)
+            }
         })
         headerCard.addView(TextView(this).apply {
             text = "ShieldGuard ভল্ট"
-            textSize = 21f
+            textSize = 19.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             gravity = Gravity.CENTER
         })
         headerCard.addView(TextView(this).apply {
-            text = "ভেতরে যেতে ভল্ট ${lockTypeBn(lockType)} দিন"
-            textSize = 13f
+            text = "প্রবেশ করতে ভল্ট ${lockTypeBn(lockType)} দিন"
+            textSize = 12.5f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             gravity = Gravity.CENTER
-            setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, 0)
+            setPadding(0, UiStyleHelper.dp(this@MainActivity, 3), 0, 0)
         })
-        root.addView(headerCard)
+        contentCol.addView(headerCard)
 
         val errTv = TextView(this).apply {
             text = ""
-            textSize = 13f
+            textSize = 12.5f
             setTextColor(UiStyleHelper.ACCENT_ROSE)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 8))
+            setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 6))
         }
-        root.addView(errTv)
+        contentCol.addView(errTv)
 
         val centerArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -335,7 +328,7 @@ class MainActivity : AppCompatActivity() {
         when (lockType) {
             PrefsManager.TYPE_PATTERN -> {
                 val patternView = PatternLockView(this).apply {
-                    background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 24, UiStyleHelper.BORDER_SUBTLE, 1)
+                    background = UiStyleHelper.cardGradientBox(this@MainActivity, 24, UiStyleHelper.BORDER_GLOW)
                     setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
                 }
                 patternView.listener = object : PatternLockView.Listener {
@@ -354,8 +347,8 @@ class MainActivity : AppCompatActivity() {
             PrefsManager.TYPE_PASSWORD -> {
                 val card = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 22, UiStyleHelper.BORDER_SUBTLE, 1)
-                    setPadding(UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18))
+                    background = UiStyleHelper.cardGradientBox(this@MainActivity, 22, UiStyleHelper.BORDER_GLOW)
+                    setPadding(UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18))
                     layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 }
                 val input = EditText(this).apply {
@@ -385,13 +378,13 @@ class MainActivity : AppCompatActivity() {
                 val dotsRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER
-                    setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 20))
+                    setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 16))
                 }
                 for (i in 0 until 6) {
                     val dot = View(this).apply {
-                        background = UiStyleHelper.circleBox(this@MainActivity, UiStyleHelper.BG_CARD, UiStyleHelper.BORDER_SUBTLE, 2)
-                        layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 14)).apply {
-                            setMargins(UiStyleHelper.dp(this@MainActivity, 8), 0, UiStyleHelper.dp(this@MainActivity, 8), 0)
+                        background = UiStyleHelper.circleBox(this@MainActivity, UiStyleHelper.BG_CARD, UiStyleHelper.BORDER_GLOW, 2)
+                        layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 13), UiStyleHelper.dp(this@MainActivity, 13)).apply {
+                            setMargins(UiStyleHelper.dp(this@MainActivity, 7), 0, UiStyleHelper.dp(this@MainActivity, 7), 0)
                         }
                     }
                     dots.add(dot)
@@ -405,7 +398,7 @@ class MainActivity : AppCompatActivity() {
                         dots[i].background = UiStyleHelper.circleBox(
                             this@MainActivity,
                             if (on) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BG_CARD,
-                            if (on) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_SUBTLE,
+                            if (on) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_GLOW,
                             2
                         )
                     }
@@ -417,17 +410,21 @@ class MainActivity : AppCompatActivity() {
                     listOf("7", "8", "9"),
                     listOf("⌫", "0", "✓")
                 )
-                val size = UiStyleHelper.dp(this, 66)
-                val gap = UiStyleHelper.dp(this, 10)
+                val screenH = resources.displayMetrics.heightPixels
+                val size = if (screenH < UiStyleHelper.dp(this, 780)) UiStyleHelper.dp(this, 56) else UiStyleHelper.dp(this, 60)
+                val gapH = UiStyleHelper.dp(this, 10)
+                val gapV = UiStyleHelper.dp(this, 4)
+
                 for (r in rows) {
                     val rowLayout = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER
                     }
                     for (k in r) {
+                        val isConfirm = k == "✓"
                         val tv = TextView(this).apply {
                             text = k
-                            textSize = 21f
+                            textSize = if (k == "⌫" || isConfirm) 19f else 21f
                             setTypeface(null, android.graphics.Typeface.BOLD)
                             gravity = Gravity.CENTER
                             isClickable = true
@@ -435,13 +432,13 @@ class MainActivity : AppCompatActivity() {
                             setTextColor(UiStyleHelper.TEXT_PRIMARY)
                             background = UiStyleHelper.touchableCircleBox(
                                 this@MainActivity,
-                                if (k == "✓") UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BG_CARD,
-                                if (k == "✓") UiStyleHelper.ACCENT_BLUE_PRESSED else UiStyleHelper.BG_PRESSED,
-                                if (k == "✓") null else UiStyleHelper.BORDER_SUBTLE,
+                                if (isConfirm) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BG_CARD,
+                                if (isConfirm) UiStyleHelper.ACCENT_BLUE_DEEP else UiStyleHelper.BG_PRESSED,
+                                if (isConfirm) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_GLOW,
                                 1
                             )
                             layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                                setMargins(gap, gap / 2, gap, gap / 2)
+                                setMargins(gapH, gapV, gapH, gapV)
                             }
                             setOnClickListener {
                                 when (k) {
@@ -478,14 +475,40 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        root.addView(centerArea)
+        contentCol.addView(centerArea)
+        scroll.addView(contentCol)
+        root.addView(scroll)
 
+        // Compact Fingerprint Circle at bottom (tap to unlock, never auto-pops!)
         if (canUseBiometric() && prefs.isBiometricEnabled()) {
-            val bioBtn = UiStyleHelper.actionButton(this, "ফিঙ্গারপ্রিন্ট / ফেস আনলক") {
-                promptBiometricForVault()
+            val bioRow = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(0, UiStyleHelper.dp(this@MainActivity, 8), 0, UiStyleHelper.dp(this@MainActivity, 20))
             }
-            root.addView(bioBtn)
-            root.postDelayed({ promptBiometricForVault() }, 180)
+            val bioCircle = LinearLayout(this).apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                background = UiStyleHelper.touchableCircleBox(
+                    this@MainActivity,
+                    UiStyleHelper.ACCENT_BLUE_SOFT,
+                    UiStyleHelper.BG_PRESSED,
+                    UiStyleHelper.ACCENT_BLUE,
+                    1
+                )
+                layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 52), UiStyleHelper.dp(this@MainActivity, 52))
+                setOnClickListener { promptBiometricForVault() }
+            }
+            bioCircle.addView(UiStyleHelper.fingerprintIconView(this, 26, UiStyleHelper.ACCENT_BLUE))
+            bioRow.addView(bioCircle)
+            bioRow.addView(TextView(this).apply {
+                text = "ফিঙ্গারপ্রিন্ট টাচ করুন"
+                textSize = 11f
+                setTextColor(UiStyleHelper.TEXT_SECONDARY)
+                setPadding(0, UiStyleHelper.dp(this@MainActivity, 5), 0, 0)
+            })
+            root.addView(bioRow)
         }
 
         setContentView(root)
@@ -506,8 +529,8 @@ class MainActivity : AppCompatActivity() {
         )
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("ShieldGuard ভল্ট আনলক")
-            .setSubtitle("ফিঙ্গারপ্রিন্ট বা ফেস দিয়ে প্রবেশ করুন")
-            .setNegativeButtonText("পিন / প্যাটার্ন ব্যবহার করুন")
+            .setSubtitle("ফিঙ্গারপ্রিন্ট বা ফেস স্পর্শ করুন")
+            .setNegativeButtonText("পিন ব্যবহার করুন")
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.BIOMETRIC_WEAK
@@ -517,17 +540,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------------------
-    // 3. SLEEK 3-TAB HOME DASHBOARD (APPS / SECURITY / UPDATES)
+    // 3. PREMIUM 3-TAB DASHBOARD (APPS / SECURITY / UPDATES)
     // -------------------------------------------------------------------------
     private fun showDashboard() {
         allInstalledApps = AppDetector.getAllLaunchableApps(this, prefs)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(UiStyleHelper.BG_CANVAS)
+            background = UiStyleHelper.canvasGradient()
         }
 
-        // Clean Header Bar
+        // Sleek Sticky Header Bar
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -539,10 +562,10 @@ class MainActivity : AppCompatActivity() {
                 UiStyleHelper.dp(this@MainActivity, 14)
             )
         }
-        topBar.addView(UiStyleHelper.shieldBadgeView(this, AppLockAccessibilityService.isRunning, 32).apply {
+        topBar.addView(UiStyleHelper.shieldBadgeView(this, AppLockAccessibilityService.isRunning, 34).apply {
             layoutParams = LinearLayout.LayoutParams(
-                UiStyleHelper.dp(this@MainActivity, 32),
-                UiStyleHelper.dp(this@MainActivity, 32)
+                UiStyleHelper.dp(this@MainActivity, 34),
+                UiStyleHelper.dp(this@MainActivity, 34)
             ).apply { rightMargin = UiStyleHelper.dp(this@MainActivity, 10) }
         })
 
@@ -552,7 +575,7 @@ class MainActivity : AppCompatActivity() {
         }
         brandCol.addView(TextView(this).apply {
             text = "ShieldGuard"
-            textSize = 18f
+            textSize = 18.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
         })
@@ -571,7 +594,8 @@ class MainActivity : AppCompatActivity() {
             this,
             "ভল্ট লক",
             UiStyleHelper.BG_ELEVATED,
-            UiStyleHelper.TEXT_SECONDARY
+            UiStyleHelper.TEXT_PRIMARY,
+            UiStyleHelper.BORDER_SUBTLE
         ).apply {
             setOnClickListener {
                 vaultUnlocked = false
@@ -586,8 +610,8 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
         })
 
-        // Scrollable Content Body
         val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
         val body = LinearLayout(this).apply {
@@ -609,7 +633,7 @@ class MainActivity : AppCompatActivity() {
         scroll.addView(body)
         root.addView(scroll)
 
-        // Sleek Bottom Navigation Bar
+        // Flagship Vector-Icon Bottom Navigation Bar
         root.addView(View(this).apply {
             setBackgroundColor(UiStyleHelper.BORDER_SUBTLE)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
@@ -619,16 +643,12 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(UiStyleHelper.BG_SURFACE)
             setPadding(
                 UiStyleHelper.dp(this@MainActivity, 8),
-                UiStyleHelper.dp(this@MainActivity, 8),
+                UiStyleHelper.dp(this@MainActivity, 6),
                 UiStyleHelper.dp(this@MainActivity, 8),
                 UiStyleHelper.dp(this@MainActivity, 10)
             )
         }
-        val navItems = listOf(
-            0 to "অ্যাপস",
-            1 to "নিরাপত্তা",
-            2 to "আপডেট"
-        )
+        val navItems = listOf(0 to "অ্যাপস", 1 to "নিরাপত্তা", 2 to "আপডেট")
         for ((tabIdx, title) in navItems) {
             val active = currentTab == tabIdx
             val item = LinearLayout(this).apply {
@@ -639,9 +659,11 @@ class MainActivity : AppCompatActivity() {
                 background = UiStyleHelper.roundedBox(
                     this@MainActivity,
                     if (active) UiStyleHelper.ACCENT_BLUE_SOFT else UiStyleHelper.BG_SURFACE,
-                    12
+                    14,
+                    if (active) UiStyleHelper.BORDER_GLOW else null,
+                    1
                 )
-                setPadding(0, UiStyleHelper.dp(this@MainActivity, 8), 0, UiStyleHelper.dp(this@MainActivity, 8))
+                setPadding(0, UiStyleHelper.dp(this@MainActivity, 7), 0, UiStyleHelper.dp(this@MainActivity, 7))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                     setMargins(UiStyleHelper.dp(this@MainActivity, 4), 0, UiStyleHelper.dp(this@MainActivity, 4), 0)
                 }
@@ -652,9 +674,14 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            item.addView(UiStyleHelper.navIconView(this, tabIdx, active).apply {
+                layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 20), UiStyleHelper.dp(this@MainActivity, 20)).apply {
+                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 3)
+                }
+            })
             item.addView(TextView(this).apply {
                 text = title
-                textSize = 13.5f
+                textSize = 11.5f
                 setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 setTextColor(if (active) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.TEXT_SECONDARY)
                 gravity = Gravity.CENTER
@@ -671,26 +698,57 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- TAB 0: HOME APPS TAB ---
+    // --- TAB 0: APPS ---
     private fun buildAppsTab(body: LinearLayout) {
+        UiStyleHelper.applyRuntimeTheme(prefs)
+        val liveNote = prefs.getHomeAnnouncement()
+        if (liveNote.isNotBlank()) {
+            val noteCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = UiStyleHelper.cardGradientBox(
+                    this@MainActivity,
+                    18,
+                    UiStyleHelper.ACCENT_GREEN,
+                    UiStyleHelper.ACCENT_GREEN_SOFT,
+                    UiStyleHelper.BG_CARD
+                )
+                setPadding(UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 12))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = UiStyleHelper.dp(this@MainActivity, 12)
+                }
+            }
+            noteCard.addView(TextView(this).apply {
+                text = liveNote
+                textSize = 13f
+                setTextColor(UiStyleHelper.TEXT_PRIMARY)
+            })
+            body.addView(noteCard)
+        }
+
         val availableUpdate = pendingUpdateResult
         if (availableUpdate != null && availableUpdate.hasUpdate && availableUpdate.apkDownloadUrl != null) {
             val updateBanner = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.ACCENT_BLUE_SOFT, 18, UiStyleHelper.ACCENT_BLUE, 1)
+                background = UiStyleHelper.cardGradientBox(
+                    this@MainActivity,
+                    20,
+                    UiStyleHelper.ACCENT_BLUE,
+                    UiStyleHelper.ACCENT_BLUE_SOFT,
+                    UiStyleHelper.BG_CARD
+                )
                 setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 14))
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     bottomMargin = UiStyleHelper.dp(this@MainActivity, 14)
                 }
             }
             updateBanner.addView(TextView(this).apply {
-                text = "নতুন আপডেট পাওয়া গেছে (${availableUpdate.latestVersionName})"
-                textSize = 14f
+                text = "নতুন আপডেট প্রস্তুত (${availableUpdate.latestVersionName})"
+                textSize = 14.5f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setTextColor(UiStyleHelper.TEXT_PRIMARY)
             })
             updateBanner.addView(TextView(this).apply {
-                text = availableUpdate.changelog.ifBlank { "নতুন ফিচার ও বাগ ফিক্স যুক্ত হয়েছে।" }
+                text = availableUpdate.changelog.ifBlank { "নতুন ফিচার ও উন্নতি যুক্ত হয়েছে।" }
                 textSize = 12f
                 setTextColor(UiStyleHelper.TEXT_SECONDARY)
                 setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, UiStyleHelper.dp(this@MainActivity, 10))
@@ -708,15 +766,12 @@ class MainActivity : AppCompatActivity() {
         val serviceActive = AppLockAccessibilityService.isRunning
         val allPermsOk = serviceActive && hasUsageStatsPermission() && Settings.canDrawOverlays(this)
 
-        // Hero Protection Bento Card
         val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(
+            background = UiStyleHelper.cardGradientBox(
                 this@MainActivity,
-                UiStyleHelper.BG_CARD,
-                20,
-                if (allPermsOk) UiStyleHelper.BORDER_SUBTLE else UiStyleHelper.ACCENT_AMBER,
-                1
+                22,
+                if (allPermsOk) UiStyleHelper.BORDER_GLOW else UiStyleHelper.ACCENT_AMBER
             )
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -729,8 +784,8 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 14))
         }
-        heroTop.addView(UiStyleHelper.shieldBadgeView(this, allPermsOk, 38).apply {
-            layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 38), UiStyleHelper.dp(this@MainActivity, 38)).apply {
+        heroTop.addView(UiStyleHelper.shieldBadgeView(this, allPermsOk, 40).apply {
+            layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 40), UiStyleHelper.dp(this@MainActivity, 40)).apply {
                 rightMargin = UiStyleHelper.dp(this@MainActivity, 12)
             }
         })
@@ -739,20 +794,19 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         heroTextCol.addView(TextView(this).apply {
-            text = if (allPermsOk) "সুরক্ষা সক্রিয় আছে" else "সুরক্ষার জন্য অনুমতি প্রয়োজন"
+            text = if (allPermsOk) prefs.getHeroActiveTitle() else "সুরক্ষার জন্য অনুমতি প্রয়োজন"
             textSize = 15.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(if (allPermsOk) UiStyleHelper.ACCENT_GREEN else UiStyleHelper.ACCENT_AMBER)
         })
         heroTextCol.addView(TextView(this).apply {
-            text = "মোট ${allInstalledApps.size}টি অ্যাপ পাওয়া গেছে · ফিঙ্গারপ্রিন্ট: ${if (prefs.isBiometricEnabled()) "চালু" else "বন্ধ"}"
+            text = "মোট ${allInstalledApps.size}টি অ্যাপ · ফিঙ্গারপ্রিন্ট: ${if (prefs.isBiometricEnabled()) "চালু" else "বন্ধ"}"
             textSize = 12f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
         })
         heroTop.addView(heroTextCol)
         heroCard.addView(heroTop)
 
-        // 3-Column Bento Stat Boxes
         val relockShort = when (prefs.getRelockMode()) {
             PrefsManager.RELOCK_IMMEDIATE -> "বের হলেই"
             PrefsManager.RELOCK_SCREEN_OFF -> "স্ক্রিন অফ"
@@ -767,7 +821,7 @@ class MainActivity : AppCompatActivity() {
         for ((idx, triple) in stats.withIndex()) {
             val box = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 14)
+                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CANVAS, 14, UiStyleHelper.BORDER_SUBTLE, 1)
                 setPadding(UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 10))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                     if (idx < 2) rightMargin = UiStyleHelper.dp(this@MainActivity, 8)
@@ -775,7 +829,7 @@ class MainActivity : AppCompatActivity() {
             }
             box.addView(TextView(this).apply {
                 text = triple.first
-                textSize = 16f
+                textSize = 15.5f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setTextColor(triple.third)
             })
@@ -813,7 +867,6 @@ class MainActivity : AppCompatActivity() {
         }
         body.addView(heroCard)
 
-        // Search Bar
         val searchEt = EditText(this).apply {
             hint = "অ্যাপ খুঁজুন (Facebook, WhatsApp, CapCut...)"
             setText(searchQuery)
@@ -836,7 +889,6 @@ class MainActivity : AppCompatActivity() {
         })
         body.addView(searchEt)
 
-        // Segmented Filter Control (Clean TextView Tabs)
         val filterTrack = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_SURFACE, 14, UiStyleHelper.BORDER_SUBTLE, 1)
@@ -848,7 +900,7 @@ class MainActivity : AppCompatActivity() {
         val filters = listOf("ALL" to "সব অ্যাপ", "LOCKED" to "লক করা", "LIMITED" to "সময়সীমা")
         for ((key, label) in filters) {
             val active = currentFilter == key
-            val seg = TextView(this).apply {
+            filterTrack.addView(TextView(this).apply {
                 text = label
                 textSize = 12.5f
                 setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -862,8 +914,7 @@ class MainActivity : AppCompatActivity() {
                     currentFilter = key
                     showDashboard()
                 }
-            }
-            filterTrack.addView(seg)
+            })
         }
         body.addView(filterTrack)
 
@@ -877,7 +928,7 @@ class MainActivity : AppCompatActivity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 12, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CANVAS, 12, UiStyleHelper.BORDER_SUBTLE, 1)
             setPadding(UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 10))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 8)
@@ -944,10 +995,10 @@ class MainActivity : AppCompatActivity() {
                     1
                 )
                 setPadding(
-                    UiStyleHelper.dp(this@MainActivity, 14),
                     UiStyleHelper.dp(this@MainActivity, 12),
+                    UiStyleHelper.dp(this@MainActivity, 11),
                     UiStyleHelper.dp(this@MainActivity, 12),
-                    UiStyleHelper.dp(this@MainActivity, 12)
+                    UiStyleHelper.dp(this@MainActivity, 11)
                 )
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -958,7 +1009,7 @@ class MainActivity : AppCompatActivity() {
 
             val iconFrame = LinearLayout(this).apply {
                 gravity = Gravity.CENTER
-                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 12)
+                background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 13, UiStyleHelper.BORDER_SUBTLE, 1)
                 setPadding(UiStyleHelper.dp(this@MainActivity, 6), UiStyleHelper.dp(this@MainActivity, 6), UiStyleHelper.dp(this@MainActivity, 6), UiStyleHelper.dp(this@MainActivity, 6))
                 layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 46), UiStyleHelper.dp(this@MainActivity, 46))
             }
@@ -969,7 +1020,7 @@ class MainActivity : AppCompatActivity() {
 
             val infoCol = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(UiStyleHelper.dp(this@MainActivity, 12), 0, UiStyleHelper.dp(this@MainActivity, 8), 0)
+                setPadding(UiStyleHelper.dp(this@MainActivity, 12), 0, UiStyleHelper.dp(this@MainActivity, 6), 0)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             infoCol.addView(TextView(this).apply {
@@ -995,7 +1046,7 @@ class MainActivity : AppCompatActivity() {
                 val exceeded = app.usedMinutesToday >= app.dailyLimitMinutes
                 badgesRow.addView(UiStyleHelper.chipBadge(
                     this,
-                    "${app.dailyLimitMinutes} মি. সীমা",
+                    "${app.dailyLimitMinutes} মি.",
                     if (exceeded) UiStyleHelper.ACCENT_ROSE_SOFT else UiStyleHelper.ACCENT_GREEN_SOFT,
                     if (exceeded) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_GREEN
                 ).apply {
@@ -1015,18 +1066,26 @@ class MainActivity : AppCompatActivity() {
             }
             infoCol.addView(badgesRow)
 
-            val configChip = UiStyleHelper.chipBadge(
-                this,
-                "কাস্টম",
-                UiStyleHelper.BG_ELEVATED,
-                UiStyleHelper.TEXT_SECONDARY
-            ).apply {
+            // Clean vector sliders icon button
+            val configBtn = LinearLayout(this).apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                background = UiStyleHelper.touchableRoundedBox(
+                    this@MainActivity,
+                    UiStyleHelper.BG_ELEVATED,
+                    UiStyleHelper.BG_PRESSED,
+                    10,
+                    UiStyleHelper.BORDER_SUBTLE,
+                    1
+                )
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                    UiStyleHelper.dp(this@MainActivity, 36),
+                    UiStyleHelper.dp(this@MainActivity, 36)
                 ).apply { rightMargin = UiStyleHelper.dp(this@MainActivity, 8) }
                 setOnClickListener { showAppOptionsSheet(app) }
             }
+            configBtn.addView(UiStyleHelper.slidersIconView(this, 17, UiStyleHelper.TEXT_SECONDARY))
 
             val lockSwitch = SwitchCompat(this).apply {
                 isChecked = app.isLocked || hasCustom
@@ -1040,18 +1099,17 @@ class MainActivity : AppCompatActivity() {
 
             card.addView(iconFrame)
             card.addView(infoCol)
-            card.addView(configChip)
+            card.addView(configBtn)
             card.addView(lockSwitch)
             container.addView(card)
         }
     }
 
-    // --- TAB 1: SECURITY SETTINGS TAB ---
+    // --- TAB 1: SECURITY ---
     private fun buildSecurityTab(body: LinearLayout) {
-        // Vault & Global App-Lock Card
         val lockCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 20, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 14)
@@ -1090,7 +1148,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        val sepSwitch = SwitchCompat(this).apply {
+        lockCard.addView(SwitchCompat(this).apply {
             text = "ভল্ট ও অ্যাপ-লক আলাদা রাখুন"
             isChecked = prefs.isSeparateAppLockEnabled()
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
@@ -1099,20 +1157,18 @@ class MainActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, checked ->
                 prefs.setSeparateAppLockEnabled(checked)
             }
-        }
-        lockCard.addView(sepSwitch)
+        })
         body.addView(lockCard)
 
-        // Biometric Card
         val bioCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 20, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 14)
             }
         }
-        val bioSwitch = SwitchCompat(this).apply {
+        bioCard.addView(SwitchCompat(this).apply {
             text = "ফিঙ্গারপ্রিন্ট ও ফেস আনলক চালু রাখুন"
             isChecked = prefs.isBiometricEnabled()
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
@@ -1122,24 +1178,22 @@ class MainActivity : AppCompatActivity() {
                 prefs.setBiometricEnabled(checked)
                 Toast.makeText(
                     this@MainActivity,
-                    if (checked) "ফিঙ্গারপ্রিন্ট / ফেস চালু হয়েছে" else "ফিঙ্গারপ্রিন্ট / ফেস বন্ধ করা হয়েছে",
+                    if (checked) "নিচে ফিঙ্গারপ্রিন্ট আইকন চালু হয়েছে" else "ফিঙ্গারপ্রিন্ট বন্ধ হয়েছে",
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        }
-        bioCard.addView(bioSwitch)
+        })
         bioCard.addView(TextView(this).apply {
-            text = "এটি বন্ধ থাকলে কোনো অ্যাপে বা ভল্টে ফিঙ্গারপ্রিন্ট পপ-আপ আসবে না।"
+            text = "চালু থাকলে লক স্ক্রিনের নিচে ছোট ফিঙ্গারপ্রিন্ট আইকন দেখাবে — টাচ করলেই সাথে সাথে খুলবে। বন্ধ থাকলে দেখাবে না।"
             textSize = 12f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             setPadding(0, UiStyleHelper.dp(this@MainActivity, 6), 0, 0)
         })
         body.addView(bioCard)
 
-        // Relock Mode Selection Card
         val relockCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 20, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20)
             setPadding(UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 16))
         }
         relockCard.addView(TextView(this).apply {
@@ -1163,7 +1217,7 @@ class MainActivity : AppCompatActivity() {
                 isFocusable = true
                 background = UiStyleHelper.roundedBox(
                     this@MainActivity,
-                    if (selected) UiStyleHelper.ACCENT_BLUE_SOFT else UiStyleHelper.BG_ELEVATED,
+                    if (selected) UiStyleHelper.ACCENT_BLUE_SOFT else UiStyleHelper.BG_CANVAS,
                     14,
                     if (selected) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_SUBTLE,
                     1
@@ -1203,7 +1257,7 @@ class MainActivity : AppCompatActivity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 14)
+            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CANVAS, 14, UiStyleHelper.BORDER_SUBTLE, 1)
             setPadding(UiStyleHelper.dp(this@MainActivity, 14), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 12))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
@@ -1234,11 +1288,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- TAB 2: OTA UPDATES & LIVE WEB PANEL ---
+    // --- TAB 2: OTA UPDATES ---
     private fun buildUpdatesTab(body: LinearLayout) {
         val verCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 20, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20, UiStyleHelper.BORDER_GLOW)
             setPadding(UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 18))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 14)
@@ -1251,7 +1305,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
         })
         verCard.addView(TextView(this).apply {
-            text = "চ্যাট থেকে কোনো আপডেট দিলে এখান থেকে সরাসরি অটো-আপডেট ও রুলস সিঙ্ক করতে পারবেন।"
+            text = "নতুন আপডেট এলে এখান থেকে এক ক্লিকে সরাসরি ইনস্টল ও রুলস সিঙ্ক করতে পারবেন।"
             textSize = 12.5f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             setPadding(0, UiStyleHelper.dp(this@MainActivity, 6), 0, UiStyleHelper.dp(this@MainActivity, 16))
@@ -1277,7 +1331,7 @@ class MainActivity : AppCompatActivity() {
 
         val serverCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CARD, 20, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.cardGradientBox(this@MainActivity, 20)
             setPadding(UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 16), UiStyleHelper.dp(this@MainActivity, 18), UiStyleHelper.dp(this@MainActivity, 16))
         }
         serverCard.addView(TextView(this).apply {
@@ -1292,7 +1346,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             setHintTextColor(UiStyleHelper.TEXT_MUTED)
             textSize = 12.5f
-            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 12, UiStyleHelper.BORDER_SUBTLE, 1)
+            background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_CANVAS, 12, UiStyleHelper.BORDER_SUBTLE, 1)
             setPadding(UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 10))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = UiStyleHelper.dp(this@MainActivity, 10)
@@ -1315,7 +1369,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------------------
-    // 4. DARK MODAL DIALOGS (PER-APP CUSTOM LOCK + TIME LIMIT + CREDENTIAL CREATOR)
+    // 4. DARK MODAL DIALOGS (PER-APP CUSTOM LOCK + TIME LIMIT)
     // -------------------------------------------------------------------------
     private fun showAppOptionsSheet(app: InstalledAppInfo) {
         val customCred = prefs.getCustomAppLock(app.packageName)
@@ -1446,14 +1500,14 @@ class MainActivity : AppCompatActivity() {
                     UiStyleHelper.BG_PRESSED,
                     UiStyleHelper.TEXT_PRIMARY,
                     UiStyleHelper.BORDER_SUBTLE,
-                    48
+                    46
                 ) {
                     dialog.dismiss()
                     promptSpecificTypeSetup(type, "$title · ${lockTypeBn(type)}") { secret ->
                         onPicked(secret, type)
                     }
                 }.apply {
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, UiStyleHelper.dp(this@MainActivity, 48)).apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, UiStyleHelper.dp(this@MainActivity, 46)).apply {
                         bottomMargin = UiStyleHelper.dp(this@MainActivity, 8)
                     }
                 })
@@ -1526,10 +1580,13 @@ class MainActivity : AppCompatActivity() {
         val url = prefs.getOtaServerUrl()
         lifecycleScope.launch {
             try {
-                UpdateManager.syncRemotePolicies(url, prefs)
+                val synced = UpdateManager.syncRemotePolicies(url, prefs)
+                UiStyleHelper.applyRuntimeTheme(prefs)
                 val result = UpdateManager.checkForUpdate(url)
                 if (result.hasUpdate && result.apkDownloadUrl != null) {
                     pendingUpdateResult = result
+                    showDashboard()
+                } else if (synced > 0) {
                     showDashboard()
                 }
             } catch (_: Exception) {}

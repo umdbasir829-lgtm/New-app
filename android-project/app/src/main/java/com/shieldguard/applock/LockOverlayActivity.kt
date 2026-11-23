@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -42,12 +43,11 @@ class LockOverlayActivity : AppCompatActivity() {
     private var pinBuffer = StringBuilder()
     private val pinDots = mutableListOf<View>()
     private lateinit var errorTv: TextView
-    private var biometricPromptedThisView = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PrefsManager(this)
-        window.statusBarColor = UiStyleHelper.BG_CANVAS
+        window.statusBarColor = UiStyleHelper.BG_CANVAS_TOP
         window.navigationBarColor = UiStyleHelper.BG_CANVAS
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -84,13 +84,13 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(currentIntent: Intent) {
+        UiStyleHelper.applyRuntimeTheme(prefs)
         targetPkg = currentIntent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
         currentTargetPkg = targetPkg
         lockMode = currentIntent.getStringExtra(EXTRA_MODE) ?: MODE_APP_LOCK
         val usedMins = currentIntent.getIntExtra(EXTRA_USED_MINUTES, 0)
         val limitMins = currentIntent.getIntExtra(EXTRA_LIMIT_MINUTES, 0)
         pinBuffer.clear()
-        biometricPromptedThisView = false
 
         val appLabel = try {
             val appInfo = packageManager.getApplicationInfo(targetPkg, 0)
@@ -117,32 +117,45 @@ class LockOverlayActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(UiStyleHelper.BG_CANVAS)
-            setPadding(
-                UiStyleHelper.dp(this@LockOverlayActivity, 22),
-                UiStyleHelper.dp(this@LockOverlayActivity, 44),
-                UiStyleHelper.dp(this@LockOverlayActivity, 22),
-                UiStyleHelper.dp(this@LockOverlayActivity, 28)
+            background = UiStyleHelper.canvasGradient()
+        }
+
+        // Scrollable top + keypad region (guarantees ZERO button clipping on any screen height)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
             )
         }
 
-        // Sleek App Header Card
+        val contentCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 24),
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 10)
+            )
+        }
+
+        // Compact Premium Identity Card
         val headerCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = UiStyleHelper.roundedBox(
+            background = UiStyleHelper.cardGradientBox(
                 this@LockOverlayActivity,
-                UiStyleHelper.BG_CARD,
-                24,
-                UiStyleHelper.BORDER_SUBTLE,
-                1
+                22,
+                UiStyleHelper.BORDER_GLOW
             )
             setPadding(
-                UiStyleHelper.dp(this@LockOverlayActivity, 20),
-                UiStyleHelper.dp(this@LockOverlayActivity, 22),
-                UiStyleHelper.dp(this@LockOverlayActivity, 20),
-                UiStyleHelper.dp(this@LockOverlayActivity, 20)
+                UiStyleHelper.dp(this@LockOverlayActivity, 18),
+                UiStyleHelper.dp(this@LockOverlayActivity, 16),
+                UiStyleHelper.dp(this@LockOverlayActivity, 18),
+                UiStyleHelper.dp(this@LockOverlayActivity, 14)
             )
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -156,26 +169,26 @@ class LockOverlayActivity : AppCompatActivity() {
                 background = UiStyleHelper.roundedBox(
                     this@LockOverlayActivity,
                     UiStyleHelper.BG_ELEVATED,
-                    20,
+                    16,
                     UiStyleHelper.BORDER_SUBTLE,
                     1
                 )
                 setPadding(
-                    UiStyleHelper.dp(this@LockOverlayActivity, 12),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 12),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 12),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 12)
+                    UiStyleHelper.dp(this@LockOverlayActivity, 9),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 9),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 9),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 9)
                 )
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = UiStyleHelper.dp(this@LockOverlayActivity, 12) }
+                ).apply { bottomMargin = UiStyleHelper.dp(this@LockOverlayActivity, 8) }
             }
             val iconView = ImageView(this).apply {
                 setImageDrawable(appIcon)
                 layoutParams = LinearLayout.LayoutParams(
-                    UiStyleHelper.dp(this@LockOverlayActivity, 52),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 52)
+                    UiStyleHelper.dp(this@LockOverlayActivity, 44),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 44)
                 )
             }
             iconFrame.addView(iconView)
@@ -192,51 +205,49 @@ class LockOverlayActivity : AppCompatActivity() {
             this,
             badgeLabel,
             if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE_SOFT else UiStyleHelper.ACCENT_BLUE_SOFT,
-            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_BLUE
+            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_BLUE,
+            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.BORDER_GLOW
         ).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = UiStyleHelper.dp(this@LockOverlayActivity, 8) }
+            ).apply { bottomMargin = UiStyleHelper.dp(this@LockOverlayActivity, 6) }
         }
         headerCard.addView(badge)
 
-        val titleTv = TextView(this).apply {
+        headerCard.addView(TextView(this).apply {
             text = appLabel
-            textSize = 21f
+            textSize = 18.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             gravity = Gravity.CENTER
-        }
-        headerCard.addView(titleTv)
+        })
 
         val subtitleText = when {
             lockMode == MODE_LIMIT_REACHED ->
-                "আজ ব্যবহার হয়েছে $usedMins মি. (সীমা $limitMins মি.)\nচালিয়ে যেতে ভল্ট মাস্টার লক দিন"
+                "আজ ব্যবহার: $usedMins মি. / সীমা: $limitMins মি. · খুলতে ভল্ট লক দিন"
             prefs.hasCustomAppLock(targetPkg) ->
-                "এই অ্যাপের জন্য আপনার সেট করা আলাদা লক দিন"
+                "এই অ্যাপের নিজস্ব লক দিয়ে আনলক করুন"
             else ->
-                "প্রবেশ করতে আপনার লক যাচাই করুন"
+                prefs.getLockSubtitle()
         }
-
-        val subTv = TextView(this).apply {
+        headerCard.addView(TextView(this).apply {
             text = subtitleText
-            textSize = 13f
+            textSize = 12f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
             gravity = Gravity.CENTER
-            setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 4), 0, 0)
-        }
-        headerCard.addView(subTv)
-        root.addView(headerCard)
+            setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 3), 0, 0)
+        })
+        contentCol.addView(headerCard)
 
         errorTv = TextView(this).apply {
             text = ""
-            textSize = 13f
+            textSize = 12.5f
             setTextColor(UiStyleHelper.ACCENT_ROSE)
             gravity = Gravity.CENTER
-            setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 12), 0, UiStyleHelper.dp(this@LockOverlayActivity, 4))
+            setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 8), 0, UiStyleHelper.dp(this@LockOverlayActivity, 4))
         }
-        root.addView(errorTv)
+        contentCol.addView(errorTv)
 
         val unlockArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -253,63 +264,63 @@ class LockOverlayActivity : AppCompatActivity() {
             PrefsManager.TYPE_PASSWORD -> buildPasswordUnlockUi(unlockArea)
             else -> buildPinUnlockUi(unlockArea)
         }
-        root.addView(unlockArea)
+        contentCol.addView(unlockArea)
 
-        // Bottom Action Row (Biometric only when explicitly allowed + Home Button)
-        val bottomRow = LinearLayout(this).apply {
+        scroll.addView(contentCol)
+        root.addView(scroll)
+
+        // Pinned Clean Bottom Bar (NEVER overlaps keypad; small tap-to-unlock fingerprint button!)
+        val bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 8),
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 20)
             )
         }
 
         if (biometricAllowed) {
-            val bioBtn = UiStyleHelper.actionButton(
-                this,
-                "ফিঙ্গারপ্রিন্ট / ফেস",
-                UiStyleHelper.ACCENT_BLUE,
-                UiStyleHelper.ACCENT_BLUE_PRESSED,
-                UiStyleHelper.TEXT_PRIMARY,
-                null,
-                48
-            ) {
-                triggerBiometricPrompt(appLabel)
-            }.apply {
-                layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@LockOverlayActivity, 48), 1f).apply {
-                    rightMargin = UiStyleHelper.dp(this@LockOverlayActivity, 8)
-                }
+            val bioCircle = LinearLayout(this).apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                contentDescription = "ফিঙ্গারপ্রিন্ট আনলক"
+                background = UiStyleHelper.touchableCircleBox(
+                    this@LockOverlayActivity,
+                    UiStyleHelper.ACCENT_BLUE_SOFT,
+                    UiStyleHelper.BG_PRESSED,
+                    UiStyleHelper.ACCENT_BLUE,
+                    1
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    UiStyleHelper.dp(this@LockOverlayActivity, 48),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 48)
+                ).apply { rightMargin = UiStyleHelper.dp(this@LockOverlayActivity, 10) }
+                setOnClickListener { triggerBiometricPrompt(appLabel) }
             }
-            bottomRow.addView(bioBtn)
+            bioCircle.addView(UiStyleHelper.fingerprintIconView(this, 24, UiStyleHelper.ACCENT_BLUE))
+            bottomBar.addView(bioCircle)
         }
 
         val homeBtn = UiStyleHelper.actionButton(
             this,
             "হোম স্ক্রিনে ফিরুন",
-            UiStyleHelper.BG_ELEVATED,
+            UiStyleHelper.BG_CARD,
             UiStyleHelper.BG_PRESSED,
             UiStyleHelper.TEXT_SECONDARY,
             UiStyleHelper.BORDER_SUBTLE,
-            48
+            46
         ) {
             goHome()
         }.apply {
-            layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@LockOverlayActivity, 48), 1f)
+            layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@LockOverlayActivity, 46), 1f)
         }
-        bottomRow.addView(homeBtn)
-        root.addView(bottomRow)
+        bottomBar.addView(homeBtn)
+        root.addView(bottomBar)
 
         setContentView(root)
-
-        if (biometricAllowed && !biometricPromptedThisView) {
-            biometricPromptedThisView = true
-            root.postDelayed({
-                if (!isFinishing && !isDestroyed && foregroundActive) {
-                    triggerBiometricPrompt(appLabel)
-                }
-            }, 180)
-        }
     }
 
     private fun lockTypeBengali(type: String): String {
@@ -325,24 +336,24 @@ class LockOverlayActivity : AppCompatActivity() {
         val dotsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, UiStyleHelper.dp(this@LockOverlayActivity, 22))
+            setPadding(0, UiStyleHelper.dp(this@LockOverlayActivity, 4), 0, UiStyleHelper.dp(this@LockOverlayActivity, 16))
         }
         for (i in 0 until 6) {
             val dot = View(this).apply {
                 background = UiStyleHelper.circleBox(
                     this@LockOverlayActivity,
                     UiStyleHelper.BG_CARD,
-                    UiStyleHelper.BORDER_SUBTLE,
+                    UiStyleHelper.BORDER_GLOW,
                     2
                 )
                 layoutParams = LinearLayout.LayoutParams(
-                    UiStyleHelper.dp(this@LockOverlayActivity, 14),
-                    UiStyleHelper.dp(this@LockOverlayActivity, 14)
+                    UiStyleHelper.dp(this@LockOverlayActivity, 13),
+                    UiStyleHelper.dp(this@LockOverlayActivity, 13)
                 ).apply {
                     setMargins(
-                        UiStyleHelper.dp(this@LockOverlayActivity, 8),
+                        UiStyleHelper.dp(this@LockOverlayActivity, 7),
                         0,
-                        UiStyleHelper.dp(this@LockOverlayActivity, 8),
+                        UiStyleHelper.dp(this@LockOverlayActivity, 7),
                         0
                     )
                 }
@@ -359,8 +370,10 @@ class LockOverlayActivity : AppCompatActivity() {
             listOf("⌫", "0", "✓")
         )
 
-        val btnSize = UiStyleHelper.dp(this, 68)
-        val margin = UiStyleHelper.dp(this, 10)
+        val screenH = resources.displayMetrics.heightPixels
+        val btnSize = if (screenH < UiStyleHelper.dp(this, 780)) UiStyleHelper.dp(this, 56) else UiStyleHelper.dp(this, 60)
+        val gapH = UiStyleHelper.dp(this, 10)
+        val gapV = UiStyleHelper.dp(this, 4)
 
         for (rowKeys in keys) {
             val row = LinearLayout(this).apply {
@@ -371,7 +384,7 @@ class LockOverlayActivity : AppCompatActivity() {
                 val isConfirm = label == "✓"
                 val keyBtn = TextView(this).apply {
                     text = label
-                    textSize = if (label == "⌫" || isConfirm) 20f else 22f
+                    textSize = if (label == "⌫" || isConfirm) 19f else 21f
                     setTypeface(null, android.graphics.Typeface.BOLD)
                     gravity = Gravity.CENTER
                     isClickable = true
@@ -380,12 +393,12 @@ class LockOverlayActivity : AppCompatActivity() {
                     background = UiStyleHelper.touchableCircleBox(
                         this@LockOverlayActivity,
                         if (isConfirm) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BG_CARD,
-                        if (isConfirm) UiStyleHelper.ACCENT_BLUE_PRESSED else UiStyleHelper.BG_PRESSED,
-                        if (isConfirm) null else UiStyleHelper.BORDER_SUBTLE,
+                        if (isConfirm) UiStyleHelper.ACCENT_BLUE_DEEP else UiStyleHelper.BG_PRESSED,
+                        if (isConfirm) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_GLOW,
                         1
                     )
                     layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
-                        setMargins(margin, margin / 2, margin, margin / 2)
+                        setMargins(gapH, gapV, gapH, gapV)
                     }
                     setOnClickListener {
                         when (label) {
@@ -420,7 +433,7 @@ class LockOverlayActivity : AppCompatActivity() {
             pinDots[i].background = UiStyleHelper.circleBox(
                 this,
                 if (active) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BG_CARD,
-                if (active) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_SUBTLE,
+                if (active) UiStyleHelper.ACCENT_BLUE else UiStyleHelper.BORDER_GLOW,
                 2
             )
         }
@@ -431,17 +444,15 @@ class LockOverlayActivity : AppCompatActivity() {
             text = "আনলক করতে আপনার প্যাটার্ন আঁকুন"
             textSize = 13f
             setTextColor(UiStyleHelper.TEXT_SECONDARY)
-            setPadding(0, 0, 0, UiStyleHelper.dp(this@LockOverlayActivity, 14))
+            setPadding(0, 0, 0, UiStyleHelper.dp(this@LockOverlayActivity, 12))
         }
         container.addView(hintTv)
 
         val patternView = PatternLockView(this).apply {
-            background = UiStyleHelper.roundedBox(
+            background = UiStyleHelper.cardGradientBox(
                 this@LockOverlayActivity,
-                UiStyleHelper.BG_CARD,
                 24,
-                UiStyleHelper.BORDER_SUBTLE,
-                1
+                UiStyleHelper.BORDER_GLOW
             )
             setPadding(
                 UiStyleHelper.dp(this@LockOverlayActivity, 16),
@@ -466,16 +477,14 @@ class LockOverlayActivity : AppCompatActivity() {
     private fun buildPasswordUnlockUi(container: LinearLayout) {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiStyleHelper.roundedBox(
+            background = UiStyleHelper.cardGradientBox(
                 this@LockOverlayActivity,
-                UiStyleHelper.BG_CARD,
                 22,
-                UiStyleHelper.BORDER_SUBTLE,
-                1
+                UiStyleHelper.BORDER_GLOW
             )
             setPadding(
                 UiStyleHelper.dp(this@LockOverlayActivity, 20),
-                UiStyleHelper.dp(this@LockOverlayActivity, 22),
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
                 UiStyleHelper.dp(this@LockOverlayActivity, 20),
                 UiStyleHelper.dp(this@LockOverlayActivity, 20)
             )
@@ -515,7 +524,7 @@ class LockOverlayActivity : AppCompatActivity() {
             this,
             "আনলক করুন",
             UiStyleHelper.ACCENT_BLUE,
-            UiStyleHelper.ACCENT_BLUE_PRESSED
+            UiStyleHelper.ACCENT_BLUE_DEEP
         ) {
             verifyAndUnlock(input.text.toString())
         }
@@ -582,8 +591,8 @@ class LockOverlayActivity : AppCompatActivity() {
         )
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("$appLabel আনলক করুন")
-            .setSubtitle("ফিঙ্গারপ্রিন্ট বা ফেস আনলক ব্যবহার করুন")
-            .setNegativeButtonText("পিন / প্যাটার্ন ব্যবহার করুন")
+            .setSubtitle("ফিঙ্গারপ্রিন্ট বা ফেস স্পর্শ করুন")
+            .setNegativeButtonText("পিন ব্যবহার করুন")
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.BIOMETRIC_WEAK

@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
@@ -17,16 +18,19 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 object UiStyleHelper {
-    val BG_CANVAS = Color.parseColor("#070B14")
-    val BG_SURFACE = Color.parseColor("#0E1525")
-    val BG_CARD = Color.parseColor("#131D31")
-    val BG_ELEVATED = Color.parseColor("#1A2742")
-    val BG_PRESSED = Color.parseColor("#24365B")
-    val BORDER_SUBTLE = Color.parseColor("#243452")
-    val ACCENT_BLUE = Color.parseColor("#3B82F6")
-    val ACCENT_BLUE_PRESSED = Color.parseColor("#2563EB")
-    val ACCENT_BLUE_SOFT = Color.parseColor("#172554")
-    val ACCENT_GREEN = Color.parseColor("#10B981")
+    val BG_CANVAS = Color.parseColor("#060A13")
+    val BG_CANVAS_TOP = Color.parseColor("#0C1528")
+    val BG_SURFACE = Color.parseColor("#0B1221")
+    val BG_CARD = Color.parseColor("#131E34")
+    val BG_CARD_TOP = Color.parseColor("#192744")
+    val BG_ELEVATED = Color.parseColor("#1C2A47")
+    val BG_PRESSED = Color.parseColor("#283B63")
+    val BORDER_SUBTLE = Color.parseColor("#273A5E")
+    val BORDER_GLOW = Color.parseColor("#3B5998")
+    var ACCENT_BLUE = Color.parseColor("#3B82F6")
+    val ACCENT_BLUE_DEEP = Color.parseColor("#2563EB")
+    val ACCENT_BLUE_SOFT = Color.parseColor("#162A56")
+    var ACCENT_GREEN = Color.parseColor("#10B981")
     val ACCENT_GREEN_SOFT = Color.parseColor("#064E3B")
     val ACCENT_AMBER = Color.parseColor("#F59E0B")
     val ACCENT_AMBER_SOFT = Color.parseColor("#451A03")
@@ -36,8 +40,43 @@ object UiStyleHelper {
     val TEXT_SECONDARY = Color.parseColor("#94A3B8")
     val TEXT_MUTED = Color.parseColor("#64748B")
 
+    fun applyRuntimeTheme(prefs: PrefsManager) {
+        try {
+            val blue = prefs.getRemoteAccentBlue()
+            if (blue.startsWith("#")) ACCENT_BLUE = Color.parseColor(blue)
+        } catch (_: Exception) {}
+        try {
+            val green = prefs.getRemoteAccentGreen()
+            if (green.startsWith("#")) ACCENT_GREEN = Color.parseColor(green)
+        } catch (_: Exception) {}
+    }
+
     fun dp(context: Context, value: Int): Int {
         return (value * context.resources.displayMetrics.density).toInt()
+    }
+
+    fun canvasGradient(): GradientDrawable {
+        return GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(BG_CANVAS_TOP, BG_CANVAS, BG_CANVAS)
+        )
+    }
+
+    fun cardGradientBox(
+        context: Context,
+        radiusDp: Int = 20,
+        strokeColor: Int = BORDER_SUBTLE,
+        topColor: Int = BG_CARD_TOP,
+        bottomColor: Int = BG_CARD
+    ): GradientDrawable {
+        return GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(topColor, bottomColor)
+        ).apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(context, radiusDp).toFloat()
+            setStroke(dp(context, 1), strokeColor)
+        }
     }
 
     fun roundedBox(
@@ -115,15 +154,15 @@ object UiStyleHelper {
         context: Context,
         label: String,
         bgColor: Int = ACCENT_BLUE,
-        pressedColor: Int = ACCENT_BLUE_PRESSED,
+        pressedColor: Int = ACCENT_BLUE_DEEP,
         textColor: Int = TEXT_PRIMARY,
         strokeColor: Int? = null,
-        heightDp: Int = 48,
+        heightDp: Int = 46,
         onClick: () -> Unit
     ): TextView {
         return TextView(context).apply {
             text = label
-            textSize = 14f
+            textSize = 13.5f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(textColor)
             gravity = Gravity.CENTER
@@ -143,19 +182,20 @@ object UiStyleHelper {
         context: Context,
         label: String,
         bgColor: Int,
-        textColor: Int
+        textColor: Int,
+        strokeColor: Int? = null
     ): TextView {
         return TextView(context).apply {
             text = label
             textSize = 11f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(textColor)
-            background = roundedBox(context, bgColor, 8)
-            setPadding(dp(context, 8), dp(context, 3), dp(context, 8), dp(context, 3))
+            background = roundedBox(context, bgColor, 9, strokeColor, 1)
+            setPadding(dp(context, 9), dp(context, 4), dp(context, 9), dp(context, 4))
         }
     }
 
-    fun shieldBadgeView(context: Context, active: Boolean, sizeDp: Int = 42): View {
+    fun shieldBadgeView(context: Context, active: Boolean, sizeDp: Int = 40): View {
         return object : View(context) {
             private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = if (active) ACCENT_BLUE_SOFT else ACCENT_AMBER_SOFT
@@ -211,6 +251,113 @@ object UiStyleHelper {
         }
     }
 
+    fun fingerprintIconView(context: Context, sizeDp: Int = 26, tintColor: Int = ACCENT_BLUE): View {
+        return object : View(context) {
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = tintColor
+                style = Paint.Style.STROKE
+                strokeWidth = dp(context, 2).toFloat()
+                strokeCap = Paint.Cap.ROUND
+            }
+
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val px = dp(context, sizeDp)
+                setMeasuredDimension(px, px)
+            }
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val w = width.toFloat()
+                val h = height.toFloat()
+                val cx = w * 0.5f
+                val cy = h * 0.53f
+
+                // Outer fingerprint ridge arcs
+                canvas.drawArc(RectF(w * 0.14f, h * 0.14f, w * 0.86f, h * 0.88f), 205f, 130f, false, paint)
+                canvas.drawArc(RectF(w * 0.24f, h * 0.24f, w * 0.76f, h * 0.84f), 190f, 165f, false, paint)
+                canvas.drawArc(RectF(w * 0.34f, h * 0.34f, w * 0.66f, h * 0.80f), 185f, 175f, false, paint)
+                canvas.drawLine(cx, cy - h * 0.05f, cx, h * 0.82f, paint)
+                canvas.drawArc(RectF(w * 0.42f, h * 0.43f, w * 0.58f, h * 0.74f), 200f, 140f, false, paint)
+            }
+        }
+    }
+
+    fun navIconView(context: Context, tabIndex: Int, active: Boolean): View {
+        return object : View(context) {
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (active) ACCENT_BLUE else TEXT_SECONDARY
+                style = Paint.Style.STROKE
+                strokeWidth = dp(context, 2).toFloat()
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val px = dp(context, 20)
+                setMeasuredDimension(px, px)
+            }
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val w = width.toFloat()
+                val h = height.toFloat()
+                when (tabIndex) {
+                    0 -> {
+                        val r = dp(context, 2).toFloat()
+                        canvas.drawRoundRect(RectF(w * 0.12f, h * 0.12f, w * 0.44f, h * 0.44f), r, r, paint)
+                        canvas.drawRoundRect(RectF(w * 0.56f, h * 0.12f, w * 0.88f, h * 0.44f), r, r, paint)
+                        canvas.drawRoundRect(RectF(w * 0.12f, h * 0.56f, w * 0.44f, h * 0.88f), r, r, paint)
+                        canvas.drawRoundRect(RectF(w * 0.56f, h * 0.56f, w * 0.88f, h * 0.88f), r, r, paint)
+                    }
+                    1 -> {
+                        val path = Path().apply {
+                            moveTo(w * 0.50f, h * 0.10f)
+                            lineTo(w * 0.84f, h * 0.24f)
+                            lineTo(w * 0.84f, h * 0.52f)
+                            quadTo(w * 0.82f, h * 0.78f, w * 0.50f, h * 0.90f)
+                            quadTo(w * 0.18f, h * 0.78f, w * 0.16f, h * 0.52f)
+                            lineTo(w * 0.16f, h * 0.24f)
+                            close()
+                        }
+                        canvas.drawPath(path, paint)
+                    }
+                    else -> {
+                        canvas.drawArc(RectF(w * 0.15f, h * 0.15f, w * 0.85f, h * 0.85f), -40f, 230f, false, paint)
+                        canvas.drawLine(w * 0.50f, h * 0.24f, w * 0.50f, h * 0.66f, paint)
+                        canvas.drawLine(w * 0.34f, h * 0.50f, w * 0.50f, h * 0.66f, paint)
+                        canvas.drawLine(w * 0.66f, h * 0.50f, w * 0.50f, h * 0.66f, paint)
+                    }
+                }
+            }
+        }
+    }
+
+    fun slidersIconView(context: Context, sizeDp: Int = 18, tintColor: Int = TEXT_SECONDARY): View {
+        return object : View(context) {
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = tintColor
+                style = Paint.Style.STROKE
+                strokeWidth = dp(context, 2).toFloat()
+                strokeCap = Paint.Cap.ROUND
+            }
+
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val px = dp(context, sizeDp)
+                setMeasuredDimension(px, px)
+            }
+
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val w = width.toFloat()
+                val h = height.toFloat()
+                canvas.drawLine(w * 0.15f, h * 0.30f, w * 0.85f, h * 0.30f, paint)
+                canvas.drawCircle(w * 0.65f, h * 0.30f, h * 0.10f, paint)
+                canvas.drawLine(w * 0.15f, h * 0.70f, w * 0.85f, h * 0.70f, paint)
+                canvas.drawCircle(w * 0.35f, h * 0.70f, h * 0.10f, paint)
+            }
+        }
+    }
+
     fun showDarkDialog(
         context: Context,
         title: String,
@@ -222,7 +369,7 @@ object UiStyleHelper {
 
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = roundedBox(context, BG_CARD, 24, BORDER_SUBTLE, 1)
+            background = cardGradientBox(context, 24, BORDER_GLOW)
             setPadding(dp(context, 20), dp(context, 20), dp(context, 20), dp(context, 18))
         }
 
