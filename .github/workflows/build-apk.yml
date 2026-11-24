@@ -40,8 +40,58 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify Fixed OTA Signing Keystore
+      - name: Restore & Verify Fixed OTA Signing Keystore
         run: |
+          base64 -d << 'EOF' > app/debug.keystore
+          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
+          v1R7t1+z0AICCAA=
+          EOF
           ls -lh app/debug.keystore
           keytool -list -v -keystore app/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep -E "SHA1:|SHA256:"
 
