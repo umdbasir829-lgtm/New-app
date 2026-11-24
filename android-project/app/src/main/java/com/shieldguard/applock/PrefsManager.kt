@@ -6,6 +6,9 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class LockCredential(
     val type: String, // TYPE_PIN | TYPE_PATTERN | TYPE_PASSWORD
@@ -55,10 +58,18 @@ class PrefsManager(context: Context) {
         private const val KEY_LOCKED_APPS = "locked_apps_set"
         private const val KEY_PER_APP_LOCKS_JSON = "per_app_locks_json"
         private const val KEY_LIMITS_JSON = "daily_limits_json"
+        private const val KEY_USAGE_DAY_DATE = "usage_tracking_date"
+        private const val KEY_USAGE_SECONDS_JSON = "usage_seconds_today_json"
+        private const val KEY_BONUS_LIMITS_DATE = "bonus_limits_date"
+        private const val KEY_BONUS_LIMITS_JSON = "bonus_limits_today_json"
         private const val KEY_UNLOCKED_UNTIL = "temp_unlocked_until_json"
         private const val KEY_OTA_URL = "ota_server_url"
         private const val KEY_RUNTIME_CONFIG_JSON = "ota_runtime_config_json"
         private const val KEY_LAST_POLICY_REVISION = "last_synced_policy_revision"
+    }
+
+    private fun todayDateKey(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     }
 
     private fun getRuntimeConfigObject(): JSONObject {
@@ -344,10 +355,120 @@ class PrefsManager(context: Context) {
 
     fun setDailyLimit(packageName: String, minutes: Int) {
         val map = getDailyLimits()
-        if (minutes <= 0) map.remove(packageName) else map[packageName] = minutes
+        if (minutes <= 0) {
+            map.remove(packageName)
+            clearBonusMinutesToday(packageName)
+        } else {
+            map[packageName] = minutes
+        }
         val obj = JSONObject()
         map.forEach { (k, v) -> obj.put(k, v) }
         prefs.edit().putString(KEY_LIMITS_JSON, obj.toString()).apply()
+    }
+
+    // --- Exact Per-Second Today Usage & Today-Only Bonus Limit ---
+    private fun getTodayUsageSecondsObject(): JSONObject {
+        val today = todayDateKey()
+        val savedDate = prefs.getString(KEY_USAGE_DAY_DATE, "")
+        if (savedDate != today) {
+            prefs.edit()
+                .putString(KEY_USAGE_DAY_DATE, today)
+                .putString(KEY_USAGE_SECONDS_JSON, "{}")
+                .apply()
+            return JSONObject()
+        }
+        val raw = prefs.getString(KEY_USAGE_SECONDS_JSON, "{}") ?: "{}"
+        return try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            JSONObject()
+        }
+    }
+
+    fun getAllAppUsageSecondsToday(): MutableMap<String, Int> {
+        val obj = getTodayUsageSecondsObject()
+        val map = mutableMapOf<String, Int>()
+        obj.keys().forEach { key ->
+            val v = obj.optInt(key, 0)
+            if (v > 0) map[key] = v
+        }
+        return map
+    }
+
+    fun getAppUsageSecondsToday(packageName: String): Int {
+        return getTodayUsageSecondsObject().optInt(packageName, 0)
+    }
+
+    fun setAppUsageSecondsToday(packageName: String, seconds: Int) {
+        val obj = getTodayUsageSecondsObject()
+        obj.put(packageName, maxOf(0, seconds))
+        prefs.edit()
+            .putString(KEY_USAGE_DAY_DATE, todayDateKey())
+            .putString(KEY_USAGE_SECONDS_JSON, obj.toString())
+            .apply()
+    }
+
+    fun saveAllAppUsageSecondsToday(map: Map<String, Int>) {
+        val obj = JSONObject()
+        map.forEach { (k, v) ->
+            if (v > 0) obj.put(k, v)
+        }
+        prefs.edit()
+            .putString(KEY_USAGE_DAY_DATE, todayDateKey())
+            .putString(KEY_USAGE_SECONDS_JSON, obj.toString())
+            .apply()
+    }
+
+    private fun getBonusLimitsObject(): JSONObject {
+        val today = todayDateKey()
+        val savedDate = prefs.getString(KEY_BONUS_LIMITS_DATE, "")
+        if (savedDate != today) {
+            prefs.edit()
+                .putString(KEY_BONUS_LIMITS_DATE, today)
+                .putString(KEY_BONUS_LIMITS_JSON, "{}")
+                .apply()
+            return JSONObject()
+        }
+        val raw = prefs.getString(KEY_BONUS_LIMITS_JSON, "{}") ?: "{}"
+        return try {
+            JSONObject(raw)
+        } catch (_: Exception) {
+            JSONObject()
+        }
+    }
+
+    fun getBonusMinutesToday(packageName: String): Int {
+        return maxOf(0, getBonusLimitsObject().optInt(packageName, 0))
+    }
+
+    fun addBonusMinutesToday(packageName: String, extraMinutes: Int) {
+        if (extraMinutes <= 0) return
+        val obj = getBonusLimitsObject()
+        val cur = maxOf(0, obj.optInt(packageName, 0))
+        obj.put(packageName, cur + extraMinutes)
+        prefs.edit()
+            .putString(KEY_BONUS_LIMITS_DATE, todayDateKey())
+            .putString(KEY_BONUS_LIMITS_JSON, obj.toString())
+            .apply()
+    }
+
+    fun clearBonusMinutesToday(packageName: String) {
+        val obj = getBonusLimitsObject()
+        obj.remove(packageName)
+        prefs.edit()
+            .putString(KEY_BONUS_LIMITS_DATE, todayDateKey())
+            .putString(KEY_BONUS_LIMITS_JSON, obj.toString())
+            .apply()
+    }
+
+    fun getEffectiveDailyLimitMinutes(packageName: String): Int {
+        val base = getDailyLimits()[packageName] ?: 0
+        if (base <= 0) return 0
+        return base + getBonusMinutesToday(packageName)
+    }
+
+    fun getEffectiveDailyLimitSeconds(packageName: String): Int {
+        return getEffectiveDailyLimitMinutes(packageName) * 60
     }
 
     // --- Temporary & Session Unlocks ---

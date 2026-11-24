@@ -1080,8 +1080,13 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, UiStyleHelper.dp(this@MainActivity, 4), 0, 0)
             }
+            val usedLabel = if (app.usedMinutesToday == 0 && app.usedSecondsToday > 0) {
+                "আজ: ${app.usedSecondsToday} সে."
+            } else {
+                "আজ: ${app.usedMinutesToday} মি."
+            }
             badgesRow.addView(TextView(this).apply {
-                text = "আজ: ${app.usedMinutesToday} মি."
+                text = usedLabel
                 textSize = 11.5f
                 setSingleLine(true)
                 maxLines = 1
@@ -1089,10 +1094,16 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, UiStyleHelper.dp(this@MainActivity, 6), 0)
             })
             if (app.dailyLimitMinutes > 0) {
-                val exceeded = app.usedMinutesToday >= app.dailyLimitMinutes
+                val effectiveLimit = app.dailyLimitMinutes + app.bonusMinutesToday
+                val exceeded = app.usedSecondsToday >= effectiveLimit * 60
+                val limitBadgeText = if (app.bonusMinutesToday > 0) {
+                    "${effectiveLimit} মি. (+${app.bonusMinutesToday})"
+                } else {
+                    "${effectiveLimit} মি."
+                }
                 badgesRow.addView(UiStyleHelper.chipBadge(
                     this,
-                    "${app.dailyLimitMinutes} মি.",
+                    limitBadgeText,
                     if (exceeded) UiStyleHelper.ACCENT_ROSE_SOFT else UiStyleHelper.ACCENT_GREEN_SOFT,
                     if (exceeded) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_GREEN
                 ).apply {
@@ -1140,6 +1151,7 @@ class MainActivity : AppCompatActivity() {
                     if (!isChecked) {
                         prefs.removeCustomAppLock(app.packageName)
                     }
+                    AppLockAccessibilityService.onPolicyUpdated()
                 }
             }
 
@@ -1539,10 +1551,24 @@ class MainActivity : AppCompatActivity() {
     // -------------------------------------------------------------------------
     private fun showAppOptionsSheet(app: InstalledAppInfo) {
         val customCred = prefs.getCustomAppLock(app.packageName)
+        val liveUsedSec = AppDetector.getAppUsageSecondsToday(this, prefs, app.packageName)
+        val liveUsedMin = liveUsedSec / 60
+        val liveUsedRemSec = liveUsedSec % 60
+        val effectiveLimit = if (app.dailyLimitMinutes > 0) app.dailyLimitMinutes + app.bonusMinutesToday else 0
+        val limitText = if (effectiveLimit > 0) {
+            if (app.bonusMinutesToday > 0) {
+                "সীমা: ${app.dailyLimitMinutes} + ${app.bonusMinutesToday} এক্সট্রা = $effectiveLimit মি."
+            } else {
+                "সীমা: $effectiveLimit মি."
+            }
+        } else {
+            "কোনো সময়সীমা নেই"
+        }
+
         UiStyleHelper.showDarkDialog(
             this,
             app.appName,
-            "আজ ব্যবহার: ${app.usedMinutesToday} মি. · ${if (app.dailyLimitMinutes > 0) "সীমা: ${app.dailyLimitMinutes} মি." else "কোনো সময়সীমা নেই"}"
+            "আজ ব্যবহার: $liveUsedMin মি. $liveUsedRemSec সে. · $limitText"
         ) { dialog, content ->
             content.addView(TextView(this).apply {
                 text = "দৈনিক ব্যবহারের সময়সীমা"
@@ -1579,9 +1605,15 @@ class MainActivity : AppCompatActivity() {
                     }
                     setOnClickListener {
                         prefs.setDailyLimit(app.packageName, mins)
+                        AppLockAccessibilityService.onPolicyUpdated()
                         hideSoftKeyboard()
                         dialog.dismiss()
                         showDashboard()
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (mins == 0) "${app.appName}: দৈনিক সময়সীমা বন্ধ করা হয়েছে" else "${app.appName}: দৈনিক $mins মিনিট সীমা সেট হয়েছে",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 })
             }
@@ -1596,7 +1628,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val customMinsEt = EditText(this).apply {
-                hint = "কাস্টম মিনিট (যেমন: 10 বা 45)"
+                hint = "কাস্টম মিনিট (যেমন: 2, 10, 45)"
                 if (app.dailyLimitMinutes > 0) {
                     setText(app.dailyLimitMinutes.toString())
                 }
@@ -1625,6 +1657,7 @@ class MainActivity : AppCompatActivity() {
                     return@actionButton
                 }
                 prefs.setDailyLimit(app.packageName, mins)
+                AppLockAccessibilityService.onPolicyUpdated()
                 customMinsEt.clearFocus()
                 hideSoftKeyboard(customMinsEt)
                 dialog.dismiss()
@@ -1636,6 +1669,146 @@ class MainActivity : AppCompatActivity() {
             customLimitRow.addView(customMinsEt)
             customLimitRow.addView(saveCustomLimitBtn)
             content.addView(customLimitRow)
+
+            // Today-only extra time section
+            if (app.dailyLimitMinutes > 0) {
+                val isCurrentlyBlocked = liveUsedSec >= effectiveLimit * 60
+                val bonusCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = UiStyleHelper.roundedBox(
+                        this@MainActivity,
+                        UiStyleHelper.BG_CANVAS,
+                        14,
+                        if (isCurrentlyBlocked) UiStyleHelper.ACCENT_AMBER else UiStyleHelper.BORDER_SUBTLE,
+                        1
+                    )
+                    setPadding(UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 12), UiStyleHelper.dp(this@MainActivity, 12))
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        bottomMargin = UiStyleHelper.dp(this@MainActivity, 16)
+                    }
+                }
+                bonusCard.addView(TextView(this).apply {
+                    text = "আজকের জন্য এক্সট্রা সময় দিন (শুধু আজ)"
+                    textSize = 13f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(if (isCurrentlyBlocked) UiStyleHelper.ACCENT_AMBER else UiStyleHelper.TEXT_PRIMARY)
+                    setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 4))
+                })
+                bonusCard.addView(TextView(this).apply {
+                    text = if (isCurrentlyBlocked) {
+                        "আজকের সময়সীমা শেষ হয়ে অ্যাপটি ব্লক আছে। এক্সট্রা মিনিট দিলে শুধু আজকের জন্য আবার চলবে।"
+                    } else {
+                        "মূল দৈনিক সীমা অপরিবর্তিত রেখে শুধু আজকের জন্য বাড়তি সময় যোগ করতে পারবেন।"
+                    }
+                    textSize = 11.5f
+                    setTextColor(UiStyleHelper.TEXT_SECONDARY)
+                    setPadding(0, 0, 0, UiStyleHelper.dp(this@MainActivity, 10))
+                })
+
+                fun grantExtraMinutes(extraMins: Int) {
+                    val curEffSec = prefs.getEffectiveDailyLimitSeconds(app.packageName)
+                    val curUsedSec = AppDetector.getAppUsageSecondsToday(this, prefs, app.packageName)
+                    val catchUpMins = if (curUsedSec > curEffSec + 59) (curUsedSec - curEffSec) / 60 else 0
+                    val totalToAdd = catchUpMins + extraMins
+                    prefs.addBonusMinutesToday(app.packageName, totalToAdd)
+                    AppLockAccessibilityService.onPolicyUpdated()
+                    hideSoftKeyboard()
+                    dialog.dismiss()
+                    showDashboard()
+                    Toast.makeText(
+                        this,
+                        "${app.appName}: শুধু আজকের জন্য +$extraMins মিনিট এক্সট্রা দেওয়া হয়েছে",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+                val extraPresets = listOf(2 to "+২ মি.", 5 to "+৫ মি.", 15 to "+১৫ মি.", 30 to "+৩০ মি.")
+                val extraRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        bottomMargin = UiStyleHelper.dp(this@MainActivity, 8)
+                    }
+                }
+                for ((mins, label) in extraPresets) {
+                    extraRow.addView(TextView(this).apply {
+                        text = label
+                        textSize = 11.5f
+                        gravity = Gravity.CENTER
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(UiStyleHelper.ACCENT_GREEN)
+                        background = UiStyleHelper.roundedBox(
+                            this@MainActivity,
+                            UiStyleHelper.ACCENT_GREEN_SOFT,
+                            10,
+                            UiStyleHelper.ACCENT_GREEN,
+                            1
+                        )
+                        layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@MainActivity, 34), 1f).apply {
+                            setMargins(UiStyleHelper.dp(this@MainActivity, 2), 0, UiStyleHelper.dp(this@MainActivity, 2), 0)
+                        }
+                        setOnClickListener { grantExtraMinutes(mins) }
+                    })
+                }
+                bonusCard.addView(extraRow)
+
+                val customExtraRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val customExtraEt = EditText(this).apply {
+                    hint = "কাস্টম এক্সট্রা মি."
+                    inputType = InputType.TYPE_CLASS_NUMBER
+                    textSize = 12.5f
+                    setTextColor(UiStyleHelper.TEXT_PRIMARY)
+                    setHintTextColor(UiStyleHelper.TEXT_MUTED)
+                    background = UiStyleHelper.roundedBox(this@MainActivity, UiStyleHelper.BG_ELEVATED, 10, UiStyleHelper.BORDER_SUBTLE, 1)
+                    setPadding(UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 8), UiStyleHelper.dp(this@MainActivity, 10), UiStyleHelper.dp(this@MainActivity, 8))
+                    layoutParams = LinearLayout.LayoutParams(0, UiStyleHelper.dp(this@MainActivity, 38), 1f).apply {
+                        rightMargin = UiStyleHelper.dp(this@MainActivity, 8)
+                    }
+                }
+                val addExtraBtn = UiStyleHelper.actionButton(
+                    this,
+                    "যোগ করুন",
+                    UiStyleHelper.ACCENT_GREEN,
+                    UiStyleHelper.ACCENT_GREEN,
+                    UiStyleHelper.TEXT_PRIMARY,
+                    null,
+                    38
+                ) {
+                    val extra = customExtraEt.text.toString().trim().toIntOrNull()
+                    if (extra == null || extra < 1 || extra > 600) {
+                        Toast.makeText(this, "১ থেকে ৬০০ মিনিটের মধ্যে লিখুন", Toast.LENGTH_SHORT).show()
+                        return@actionButton
+                    }
+                    customExtraEt.clearFocus()
+                    hideSoftKeyboard(customExtraEt)
+                    grantExtraMinutes(extra)
+                }.apply {
+                    layoutParams = LinearLayout.LayoutParams(UiStyleHelper.dp(this@MainActivity, 96), UiStyleHelper.dp(this@MainActivity, 38))
+                }
+                customExtraRow.addView(customExtraEt)
+                customExtraRow.addView(addExtraBtn)
+                bonusCard.addView(customExtraRow)
+
+                if (app.bonusMinutesToday > 0) {
+                    bonusCard.addView(TextView(this).apply {
+                        text = "আজকের এক্সট্রা (+${app.bonusMinutesToday} মি.) মুছুন"
+                        textSize = 11.5f
+                        setTextColor(UiStyleHelper.ACCENT_ROSE)
+                        gravity = Gravity.CENTER
+                        setPadding(0, UiStyleHelper.dp(this@MainActivity, 10), 0, 0)
+                        setOnClickListener {
+                            prefs.clearBonusMinutesToday(app.packageName)
+                            AppLockAccessibilityService.onPolicyUpdated()
+                            dialog.dismiss()
+                            showDashboard()
+                            Toast.makeText(this@MainActivity, "আজকের এক্সট্রা সময় মুছে ফেলা হয়েছে", Toast.LENGTH_SHORT).show()
+                        }
+                    })
+                }
+                content.addView(bonusCard)
+            }
 
             content.addView(TextView(this).apply {
                 text = "এই অ্যাপের জন্য আলাদা লক"
@@ -1663,6 +1836,7 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss()
                     promptSpecificTypeSetup(type, "${app.appName} — ${lockTypeBn(type)}") { secret ->
                         prefs.setCustomAppLock(app.packageName, secret, type, allowBiometric = false)
+                        AppLockAccessibilityService.onPolicyUpdated()
                         showDashboard()
                     }
                 }.apply {
@@ -1695,6 +1869,7 @@ class MainActivity : AppCompatActivity() {
                     44
                 ) {
                     prefs.removeCustomAppLock(app.packageName)
+                    AppLockAccessibilityService.onPolicyUpdated()
                     dialog.dismiss()
                     showDashboard()
                 })
@@ -1800,6 +1975,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val synced = UpdateManager.syncRemotePolicies(url, prefs)
+                if (synced > 0) AppLockAccessibilityService.onPolicyUpdated()
                 UiStyleHelper.applyRuntimeTheme(prefs)
                 val result = UpdateManager.checkForUpdate(url)
                 if (result.hasUpdate && result.apkDownloadUrl != null) {
@@ -1818,6 +1994,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val synced = UpdateManager.syncRemotePolicies(url, prefs)
+                if (synced > 0) AppLockAccessibilityService.onPolicyUpdated()
                 val result = UpdateManager.checkForUpdate(url)
                 if (result.hasUpdate && result.apkDownloadUrl != null) {
                     pendingUpdateResult = result

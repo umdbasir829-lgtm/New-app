@@ -26,6 +26,7 @@ class LockOverlayActivity : AppCompatActivity() {
         const val EXTRA_MODE = "extra_mode"
         const val EXTRA_USED_MINUTES = "extra_used"
         const val EXTRA_LIMIT_MINUTES = "extra_limit"
+        const val EXTRA_BIOMETRIC_ONLY = "extra_biometric_only"
         const val MODE_APP_LOCK = "APP_LOCK"
         const val MODE_LIMIT_REACHED = "LIMIT_REACHED"
 
@@ -41,11 +42,16 @@ class LockOverlayActivity : AppCompatActivity() {
         fun isForegroundFor(pkg: String): Boolean {
             return (foregroundActive || biometricPromptActive) && currentTargetPkg == pkg
         }
+
+        fun isBiometricOverlayOpen(): Boolean {
+            return biometricPromptActive
+        }
     }
 
     private lateinit var prefs: PrefsManager
     private var targetPkg: String = ""
     private var lockMode: String = MODE_APP_LOCK
+    private var biometricOnlyMode: Boolean = false
     private var pinBuffer = StringBuilder()
     private val pinDots = mutableListOf<View>()
     private var expectedPinLength: Int = 0
@@ -62,7 +68,14 @@ class LockOverlayActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                goHome()
+                if (biometricOnlyMode) {
+                    biometricPromptActive = false
+                    finishAndRemoveTask()
+                    @Suppress("DEPRECATION")
+                    overridePendingTransition(0, 0)
+                } else {
+                    goHome()
+                }
             }
         })
         handleIntent(intent)
@@ -125,6 +138,7 @@ class LockOverlayActivity : AppCompatActivity() {
         targetPkg = currentIntent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
         currentTargetPkg = targetPkg
         lockMode = currentIntent.getStringExtra(EXTRA_MODE) ?: MODE_APP_LOCK
+        biometricOnlyMode = currentIntent.getBooleanExtra(EXTRA_BIOMETRIC_ONLY, false)
         val usedMins = currentIntent.getIntExtra(EXTRA_USED_MINUTES, 0)
         val limitMins = currentIntent.getIntExtra(EXTRA_LIMIT_MINUTES, 0)
         pinBuffer.clear()
@@ -137,29 +151,36 @@ class LockOverlayActivity : AppCompatActivity() {
             targetPkg
         }
 
+        if (biometricOnlyMode) {
+            val darkScreen = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                background = UiStyleHelper.canvasGradient()
+            }
+            setContentView(darkScreen)
+            hideSoftKeyboard()
+            triggerBiometricPrompt(appLabel, closeOnCancel = true)
+            return
+        }
+
         val appIcon = try {
             packageManager.getApplicationIcon(targetPkg)
         } catch (_: Exception) {
             null
         }
 
-        val effectiveType = if (lockMode == MODE_LIMIT_REACHED) {
-            prefs.getVaultLockType()
-        } else {
-            prefs.getEffectiveLockType(targetPkg)
-        }
+        val isLimitBlocked = lockMode == MODE_LIMIT_REACHED
+        val effectiveType = if (isLimitBlocked) PrefsManager.TYPE_PASSWORD else prefs.getEffectiveLockType(targetPkg)
 
-        expectedPinLength = if (effectiveType == PrefsManager.TYPE_PIN) {
-            if (lockMode == MODE_LIMIT_REACHED) prefs.getVaultPinLength() else prefs.getEffectivePinLength(targetPkg)
+        expectedPinLength = if (!isLimitBlocked && effectiveType == PrefsManager.TYPE_PIN) {
+            prefs.getEffectivePinLength(targetPkg)
         } else {
             0
         }
 
-        val biometricAllowed = if (lockMode == MODE_LIMIT_REACHED) {
-            prefs.isBiometricAllowedForVault() && canUseBiometric()
-        } else {
-            prefs.isBiometricAllowedForApp(targetPkg) && canUseBiometric()
-        }
+        val biometricAllowed = !isLimitBlocked &&
+            prefs.isBiometricAllowedForApp(targetPkg) &&
+            canUseBiometric()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -193,7 +214,7 @@ class LockOverlayActivity : AppCompatActivity() {
             background = UiStyleHelper.cardGradientBox(
                 this@LockOverlayActivity,
                 22,
-                UiStyleHelper.BORDER_GLOW
+                if (isLimitBlocked) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.BORDER_GLOW
             )
             setPadding(
                 UiStyleHelper.dp(this@LockOverlayActivity, 18),
@@ -240,7 +261,7 @@ class LockOverlayActivity : AppCompatActivity() {
         }
 
         val badgeLabel = when {
-            lockMode == MODE_LIMIT_REACHED -> "দৈনিক সময়সীমা শেষ"
+            isLimitBlocked -> "দৈনিক সময়সীমা শেষ"
             prefs.hasCustomAppLock(targetPkg) -> "নিজস্ব ${lockTypeBengali(effectiveType)}"
             prefs.isSeparateAppLockEnabled() -> "সুরক্ষিত অ্যাপ · ${lockTypeBengali(effectiveType)}"
             else -> "ভল্ট লক · ${lockTypeBengali(effectiveType)}"
@@ -248,9 +269,9 @@ class LockOverlayActivity : AppCompatActivity() {
         val badge = UiStyleHelper.chipBadge(
             this,
             badgeLabel,
-            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE_SOFT else UiStyleHelper.ACCENT_BLUE_SOFT,
-            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_BLUE,
-            if (lockMode == MODE_LIMIT_REACHED) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.BORDER_GLOW
+            if (isLimitBlocked) UiStyleHelper.ACCENT_ROSE_SOFT else UiStyleHelper.ACCENT_BLUE_SOFT,
+            if (isLimitBlocked) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.ACCENT_BLUE,
+            if (isLimitBlocked) UiStyleHelper.ACCENT_ROSE else UiStyleHelper.BORDER_GLOW
         ).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -268,8 +289,8 @@ class LockOverlayActivity : AppCompatActivity() {
         })
 
         val subtitleText = when {
-            lockMode == MODE_LIMIT_REACHED ->
-                "আজ ব্যবহার: $usedMins মি. / সীমা: $limitMins মি. · খুলতে ভল্ট লক দিন"
+            isLimitBlocked ->
+                "আজ ব্যবহার: $usedMins মি. / সীমা: $limitMins মি."
             prefs.hasCustomAppLock(targetPkg) ->
                 "এই অ্যাপের নিজস্ব লক দিয়ে আনলক করুন"
             else ->
@@ -303,10 +324,14 @@ class LockOverlayActivity : AppCompatActivity() {
             )
         }
 
-        when (effectiveType) {
-            PrefsManager.TYPE_PATTERN -> buildPatternUnlockUi(unlockArea)
-            PrefsManager.TYPE_PASSWORD -> buildPasswordUnlockUi(unlockArea)
-            else -> buildPinUnlockUi(unlockArea)
+        if (isLimitBlocked) {
+            buildHardLimitBlockedUi(unlockArea)
+        } else {
+            when (effectiveType) {
+                PrefsManager.TYPE_PATTERN -> buildPatternUnlockUi(unlockArea)
+                PrefsManager.TYPE_PASSWORD -> buildPasswordUnlockUi(unlockArea)
+                else -> buildPinUnlockUi(unlockArea)
+            }
         }
         contentCol.addView(unlockArea)
 
@@ -341,7 +366,7 @@ class LockOverlayActivity : AppCompatActivity() {
                     UiStyleHelper.dp(this@LockOverlayActivity, 48),
                     UiStyleHelper.dp(this@LockOverlayActivity, 48)
                 ).apply { rightMargin = UiStyleHelper.dp(this@LockOverlayActivity, 10) }
-                setOnClickListener { triggerBiometricPrompt(appLabel) }
+                setOnClickListener { triggerBiometricPrompt(appLabel, closeOnCancel = false) }
             }
             bioCircle.addView(UiStyleHelper.fingerprintIconView(this, 24, UiStyleHelper.ACCENT_BLUE))
             bottomBar.addView(bioCircle)
@@ -364,9 +389,64 @@ class LockOverlayActivity : AppCompatActivity() {
         root.addView(bottomBar)
 
         setContentView(root)
-        if (effectiveType != PrefsManager.TYPE_PASSWORD) {
+        if (isLimitBlocked || effectiveType != PrefsManager.TYPE_PASSWORD) {
             hideSoftKeyboard()
         }
+    }
+
+    private fun buildHardLimitBlockedUi(container: LinearLayout) {
+        val blockCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = UiStyleHelper.cardGradientBox(
+                this@LockOverlayActivity,
+                22,
+                UiStyleHelper.ACCENT_ROSE
+            )
+            setPadding(
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 22),
+                UiStyleHelper.dp(this@LockOverlayActivity, 20),
+                UiStyleHelper.dp(this@LockOverlayActivity, 22)
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        blockCard.addView(TextView(this).apply {
+            text = "আজকের নির্ধারিত সময় শেষ হয়ে গেছে"
+            textSize = 16.5f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(UiStyleHelper.ACCENT_ROSE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, UiStyleHelper.dp(this@LockOverlayActivity, 8))
+        })
+        blockCard.addView(TextView(this).apply {
+            text = "আজ আর এই অ্যাপটি খোলা যাবে না।\nপুনরায় ব্যবহার করতে ShieldGuard-এ ঢুকে লিমিট বন্ধ করুন অথবা আজকের জন্য এক্সট্রা সময় দিন।"
+            textSize = 13f
+            setTextColor(UiStyleHelper.TEXT_SECONDARY)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, UiStyleHelper.dp(this@LockOverlayActivity, 18))
+        })
+        blockCard.addView(
+            UiStyleHelper.actionButton(
+                this,
+                "ShieldGuard-এ সীমা পরিবর্তন করুন",
+                UiStyleHelper.ACCENT_BLUE,
+                UiStyleHelper.ACCENT_BLUE_DEEP
+            ) {
+                foregroundActive = false
+                currentTargetPkg = null
+                startActivity(Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                })
+                finishAndRemoveTask()
+                @Suppress("DEPRECATION")
+                overridePendingTransition(0, 0)
+            }
+        )
+        container.addView(blockCard)
     }
 
     private fun lockTypeBengali(type: String): String {
@@ -566,7 +646,7 @@ class LockOverlayActivity : AppCompatActivity() {
         }
 
         val input = EditText(this).apply {
-            hint = if (lockMode == MODE_LIMIT_REACHED) "ভল্ট মাস্টার পাসওয়ার্ড" else "পাসওয়ার্ড লিখুন"
+            hint = "পাসওয়ার্ড লিখুন"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setTextColor(UiStyleHelper.TEXT_PRIMARY)
             setHintTextColor(UiStyleHelper.TEXT_MUTED)
@@ -607,11 +687,7 @@ class LockOverlayActivity : AppCompatActivity() {
     }
 
     private fun tryVerifySilent(secret: String): Boolean {
-        return if (lockMode == MODE_LIMIT_REACHED) {
-            prefs.verifyVaultPassword(secret)
-        } else {
-            prefs.verifyAppUnlock(targetPkg, secret)
-        }
+        return prefs.verifyAppUnlock(targetPkg, secret)
     }
 
     private fun verifyAndUnlock(secret: String) {
@@ -629,13 +705,9 @@ class LockOverlayActivity : AppCompatActivity() {
         biometricPromptActive = false
         foregroundActive = false
         currentTargetPkg = null
-        if (lockMode == MODE_LIMIT_REACHED) {
-            prefs.grantTemporaryUnlock("${targetPkg}_limit_override", 10 * 60 * 1000L)
-        } else {
-            AppLockAccessibilityService.markSessionUnlocked(targetPkg)
-            if (prefs.getRelockMode() != PrefsManager.RELOCK_IMMEDIATE) {
-                prefs.grantTemporaryUnlock(targetPkg, 3 * 60 * 1000L)
-            }
+        AppLockAccessibilityService.unlockFromBiometric(targetPkg)
+        if (prefs.getRelockMode() != PrefsManager.RELOCK_IMMEDIATE) {
+            prefs.grantTemporaryUnlock(targetPkg, 3 * 60 * 1000L)
         }
         finishAndRemoveTask()
         @Suppress("DEPRECATION")
@@ -651,7 +723,7 @@ class LockOverlayActivity : AppCompatActivity() {
         return res == BiometricManager.BIOMETRIC_SUCCESS
     }
 
-    private fun triggerBiometricPrompt(appLabel: String) {
+    private fun triggerBiometricPrompt(appLabel: String, closeOnCancel: Boolean) {
         biometricPromptActive = true
         val executor = ContextCompat.getMainExecutor(this)
         val prompt = BiometricPrompt(
@@ -667,6 +739,13 @@ class LockOverlayActivity : AppCompatActivity() {
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
                     biometricPromptActive = false
+                    if (closeOnCancel) {
+                        foregroundActive = false
+                        currentTargetPkg = null
+                        finishAndRemoveTask()
+                        @Suppress("DEPRECATION")
+                        overridePendingTransition(0, 0)
+                    }
                 }
 
                 override fun onAuthenticationFailed() {

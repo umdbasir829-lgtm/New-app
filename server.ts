@@ -179,11 +179,11 @@ function readStore(): VaultStore {
       appLockSalt: null,
       apps: DEFAULT_APPS,
       releaseManifest: {
-        versionCode: 8,
-        versionName: '2.4.1',
+        versionCode: 9,
+        versionName: '2.5.0',
         policyRevision: 1,
         publishedAt: new Date().toISOString(),
-        changelog: 'v2.4.1: রেপো-লকড স্থায়ী সাইনিং কী (আগামী সব আপডেট সরাসরি ইনস্টল হবে), ৪/৬ পিন ডট, ডাবল-পিন ও কিবোর্ড হাইড ফিক্স, অ্যাপে ফিঙ্গারপ্রিন্ট সেভ এবং কাস্টম মিনিট সীমা!',
+        changelog: 'v2.5.0: ০ms তাৎক্ষণিক লক ওভারলে (আগে অ্যাপ খুলে যাওয়া ও ডাবল পিন সম্পূর্ণ বন্ধ), ৩০০ms ফোরগ্রাউন্ড ওয়াচার (পাসওয়ার্ড ছাড়া ঢোকা বন্ধ), নির্ভুল দৈনিক টাইম লিমিট, শেষ ১ মিনিটের লাইভ কাউন্টডাউন + অটো এক্সিট ও হার্ড ব্লক, এবং শুধু আজকের জন্য এক্সট্রা সময় দেওয়ার সুবিধা!',
         apkUrl: 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
       },
       runtimeConfig: DEFAULT_RUNTIME_CONFIG,
@@ -194,13 +194,13 @@ function readStore(): VaultStore {
   const raw = fs.readFileSync(STORE_FILE, 'utf-8');
   const parsed = JSON.parse(raw) as VaultStore;
   let dirty = false;
-  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 8) {
+  if (!parsed.releaseManifest || parsed.releaseManifest.versionCode < 9) {
     parsed.releaseManifest = {
-      versionCode: 8,
-      versionName: '2.4.1',
+      versionCode: 9,
+      versionName: '2.5.0',
       policyRevision: (parsed.releaseManifest?.policyRevision || 1) + 1,
       publishedAt: new Date().toISOString(),
-      changelog: 'v2.4.1: রেপো-লকড স্থায়ী সাইনিং কী (আগামী সব আপডেট সরাসরি ইনস্টল হবে), ৪/৬ পিন ডট, ডাবল-পিন ও কিবোর্ড হাইড ফিক্স, অ্যাপে ফিঙ্গারপ্রিন্ট সেভ এবং কাস্টম মিনিট সীমা!',
+      changelog: 'v2.5.0: ০ms তাৎক্ষণিক লক ওভারলে (আগে অ্যাপ খুলে যাওয়া ও ডাবল পিন সম্পূর্ণ বন্ধ), ৩০০ms ফোরগ্রাউন্ড ওয়াচার (পাসওয়ার্ড ছাড়া ঢোকা বন্ধ), নির্ভুল দৈনিক টাইম লিমিট, শেষ ১ মিনিটের লাইভ কাউন্টডাউন + অটো এক্সিট ও হার্ড ব্লক, এবং শুধু আজকের জন্য এক্সট্রা সময় দেওয়ার সুবিধা!',
       apkUrl: parsed.releaseManifest?.apkUrl || 'https://github.com/umdbasir829-lgtm/New-app/releases/latest/download/ShieldGuard-AppLock.apk',
     };
     dirty = true;
